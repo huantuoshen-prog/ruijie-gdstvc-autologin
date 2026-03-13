@@ -1,6 +1,6 @@
 # Ruijie-Auto-Login 🔐
 
-> 广东科学技术职业学院 锐捷Web认证脚本
+> 广东科学技术职业学院(广科/科干) 锐捷Web认证脚本
 
 ![GitHub](https://img.shields.io/github/license/17388749803/Ruijie-Auto-Login)
 ![GitHub stars](https://img.shields.io/github/stars/17388749803/Ruijie-Auto-Login)
