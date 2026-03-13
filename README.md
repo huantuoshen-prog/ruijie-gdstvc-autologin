@@ -1,44 +1,162 @@
 # Ruijie-Auto-Login
+
+广东科学技术职业学院 锐捷Web认证脚本
+
+> ⚠️ **重要提示**: 原作者（error7904）已离校长时间未更新，本仓库为新维护版本，继续为广科院同学提供支持。
+
 ## 简介
-本脚本基于 [链接](https://github.com/1203746884/RuijiePortalLoginShellScript) 修改制作，仅适用于广东科学职业技术学院珠海校区使用，广州校区自测。
-广东科学技术职业学院  锐捷web 认证 shell
 
-# 脚本工作原理
+本脚本用于广东科学技术职业学院（珠海校区/广州校区）的锐捷 ePortal 网页认证自动化。
 
-这个 Shell script 主要工作原理如下：
+仅适用于广东科学技术职业学院使用，其他学校请自测。
 
-1. 向 [Captive Portal Server](https://en.wikipedia.org/wiki/Captive_portal) 发送 GET 请求，检查返回的 HTTP 状态码是否为 204：
-   1. 如果为 204 则说明当前已经能正常联网，退出脚本，停止后续认证流程；
-   2. 如果不是 204 则说明当前未进行锐捷认证（一般来说，在未认证的情况下请求任意页面，认证服务器都会返回一个 HTTP 302 或者 301 状态码，用于将你重定向到 ePortal 认证页面），则将 HTTP 重定向所转向的页面的 URL 作为认证页面 URL。
-2. 构造进行锐捷 ePortal 认证所需的 HTTP 请求，并通过 curl 发送该请求。
-3. 认证成功。
+## 功能特点
 
-# 基本用法
+- ✅ **实时日志输出** - 每一步都有详细的状态提示
+- ✅ **多环境适配** - 自动检测多种网络环境
+- ✅ **美化输出** - 彩色日志，更清晰直观
+- ✅ **自动重试** - 智能检测网络状态
+- ✅ **错误提示** - 详细的中文错误信息
 
-```shell
-./ruijie_student.sh username password
+## 环境要求
+
+- Linux / macOS / Windows (WSL)
+- OpenWrt 路由器
+- curl 工具
+
+## 安装
+
+### 方法1: 直接下载
+
+```bash
+wget https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/ruijie_student.sh
+chmod +x ruijie_student.sh
 ```
 
-- username 参数为认证用户名。
-- password 参数为认证密码。
+### 方法2: 克隆仓库
 
+```bash
+git clone https://github.com/17388749803/Ruijie-Auto-Login.git
+cd Ruijie-Auto-Login
+```
 
-# 局限性
+## 使用方法
 
-如果多次认证失败（例如用户名或密码错误）或者多次重复刷新认证页面，则认证过程需要输入页面上显示的验证码。此脚本并没有识别验证码的功能。
+### 基础用法
 
-如果你所在的学校需要在认证过程中输入验证码，则不适合使用这个 shell script 进行认证，需要使用 Python 等脚本语言实现验证码识别功能再进行认证。
+```bash
+./ruijie_student.sh <用户名> <密码>
 
-# 自动认证方式
+# 示例
+./ruijie_student.sh 2023000001 123456
+```
 
-可配合OpenWRT路由器接入认证，定时运行脚本即可。路由器需要curl的支持
+### 学生账号
 
-安装curl
-```shell
+```bash
+./ruijie_student.sh 你的学号 你的密码
+```
+
+### 教师账号
+
+```bash
+./ruijie_teacher.sh 你的工号 你的密码
+```
+
+## 输出示例
+
+```
+==========================================
+  锐捷网络认证助手 v2.0
+  广东科学技术职业学院专用
+==========================================
+
+[STEP] 检测网络连接状态...
+[INFO] 尝试连接: http://www.google.cn/generate_204
+[✓] 检测成功: http://www.google.cn/generate_204 (HTTP 204)
+[✓] 网络已连接，无需认证！
+```
+
+或认证时：
+
+```
+[STEP] 检测网络连接状态...
+[⚠] 未检测到网络连接，开始认证流程...
+[STEP] 获取认证页面...
+[✓] 获取成功: http://10.x.x.x/...
+[STEP] 构建认证参数...
+[✓] 参数构建完成
+[STEP] 正在提交认证信息...
+[STEP] 验证认证结果...
+==========================================
+  认证成功！🎉
+  现在可以正常上网了
+==========================================
+```
+
+## OpenWrt 路由器定时任务
+
+配合 OpenWrt 路由器实现自动认证：
+
+### 1. 安装 curl
+
+```bash
 opkg update
 opkg install curl
 ```
-自动任务 每5分钟运行一次
-```shell
-*/5 * * * * /bin/teacher.sh username password
+
+### 2. 设置定时任务
+
+```bash
+# 编辑定时任务
+crontab -e
+
+# 添加以下行（每5分钟检查一次）
+*/5 * * * * /path/to/ruijie_student.sh 你的学号 你的密码 >> /var/log/ruijie.log 2>&1
 ```
+
+### 3. 查看日志
+
+```bash
+tail -f /var/log/ruijie.log
+```
+
+## 常见问题
+
+### Q: 提示"需要输入验证码"怎么办？
+A: 当前脚本不支持验证码识别，建议在网页端手动认证一次后，再使用脚本。
+
+### Q: 认证失败怎么办？
+A: 
+1. 检查用户名和密码是否正确
+2. 检查网络是否正常
+3. 尝试更换检测地址
+
+### Q: 路由器上运行有问题？
+A: 确保路由器已安装 curl：`opkg install curl`
+
+## 致谢
+
+- 原始作者: [error7904](https://github.com/error7904)
+- 参考项目: [RuijiePortalLoginShellScript](https://github.com/1203746884/RuijiePortalLoginShellScript)
+
+## 许可证
+
+GPL-3.0
+
+## 更新日志
+
+### v2.0 (2025-03)
+- 新增实时日志输出
+- 优化多环境适配
+- 添加彩色终端输出
+- 改进错误处理
+
+### v1.x
+- 原始版本
+- 基本认证功能
+
+---
+
+🌐 GitHub: https://github.com/17388749803/Ruijie-Auto-Login
+📧 问题反馈: 请提交 Issue
