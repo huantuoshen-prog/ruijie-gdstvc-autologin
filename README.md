@@ -60,6 +60,7 @@ ifconfig eth0 | grep HWaddr
 - ✅ **美化输出** - 彩色日志，更清晰直观
 - ✅ **自动重试** - 智能检测网络状态
 - ✅ **错误提示** - 详细的中文错误信息
+- ✅ **一键配置** - setup.sh 自动安装配置
 
 ## 环境要求
 
@@ -69,14 +70,34 @@ ifconfig eth0 | grep HWaddr
 
 ## 安装
 
-### 方法1: 直接下载
+### 方法1: 一键配置（推荐）
+
+最简单的安装方式，一键配置并设置自动登录：
+
+```bash
+# 下载配置脚本
+wget https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/setup.sh
+
+# 运行配置（需要root权限）
+chmod +x setup.sh
+sudo sh setup.sh
+```
+
+配置过程：
+1. 自动检测并安装必要工具
+2. 自动下载认证脚本
+3. **互动式界面**，输入用户名和密码
+4. 自动测试认证
+5. **自动配置定时任务**（凌晨5点-7点，每5分钟尝试）
+
+### 方法2: 直接下载
 
 ```bash
 wget https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/ruijie_student.sh
 chmod +x ruijie_student.sh
 ```
 
-### 方法2: 克隆仓库
+### 方法3: 克隆仓库
 
 ```bash
 git clone https://github.com/17388749803/Ruijie-Auto-Login.git
@@ -199,6 +220,9 @@ GPL-3.0
 ## 更新日志
 
 ### v2.0 (2025-03)
+- 新增一键配置脚本 (setup.sh)
+- 互动式中文安装界面
+- 自动配置定时任务（凌晨5点-7点，每5分钟）
 - 新增实时日志输出
 - 优化多环境适配
 - 添加彩色终端输出
