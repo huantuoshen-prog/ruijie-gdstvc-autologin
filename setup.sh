@@ -195,7 +195,7 @@ if command -v crontab >/dev/null 2>&1; then
     CRON_CMD="crontab"
 elif [ -f /etc/crontabs/root ]; then
     CRON_CMD="/bin/sh /etc/crontabs/root"
-elif [ -f /etc/crontabs/$(whoami) ]; then
+elif [ -f "/etc/crontabs/$(whoami)" ]; then
     CRON_CMD="/bin/sh /etc/crontabs/$(whoami)"
 fi
 

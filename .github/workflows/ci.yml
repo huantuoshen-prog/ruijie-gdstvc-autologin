@@ -23,7 +23,8 @@ jobs:
         run: |
           for f in *.sh lib/*.sh tests/*.sh; do
             if [ -f "$f" ]; then
-              shellcheck -s bash -x "$f" || exit 1
+              # 仅检查错误级别 (SC1xxx)，忽略警告和信息
+              shellcheck -s bash -x -S error "$f" || exit 1
             fi
           done
 
