@@ -13,6 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare symlinks
+        run: |
+          rm -f ruijie_student.sh ruijie_teacher.sh
+          ln -s ruijie.sh ruijie_student.sh
+          ln -s ruijie.sh ruijie_teacher.sh
+
       - name: Run shellcheck on all scripts
         run: |
           for f in *.sh lib/*.sh tests/*.sh; do
