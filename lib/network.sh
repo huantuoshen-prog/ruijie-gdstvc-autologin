@@ -124,29 +124,40 @@ do_login() {
 
     _result=$(send_auth_request "$_login_url" "$_username" "$_password" "$_account_type")
 
-    # 分析响应内容判断成功与否
-    _error=""
-    if echo "$_result" | grep -qi "password\|密码错误\|用户不存在"; then
-        _error="用户名或密码错误"
-    elif echo "$_result" | grep -qi "验证码"; then
-        _error="需要输入验证码"
-    elif echo "$_result" | grep -qi "locked\|锁定"; then
-        _error="账号已被锁定"
-    elif echo "$_result" | grep -qi "已认证\|成功"; then
-        _error=""
-    fi
+    # 调试：输出服务器响应
+    echo ""
+    log_info "服务器响应: $_result"
+    echo ""
 
-    if [ -n "$_error" ]; then
+    # 分析响应内容 —— 只有明确成功才视为成功
+    if echo "$_result" | grep -qi "password\|密码错误\|用户不存在\|用户名或密码错误"; then
         echo ""
-        log_error "认证失败: $_error"
+        log_error "认证失败: 用户名或密码错误"
         echo ""
         return 1
+    elif echo "$_result" | grep -qi "验证码"; then
+        echo ""
+        log_error "认证失败: 需要输入验证码"
+        echo ""
+        return 1
+    elif echo "$_result" | grep -qi "locked\|锁定"; then
+        echo ""
+        log_error "认证失败: 账号已被锁定"
+        echo ""
+        return 1
+    elif echo "$_result" | grep -qi "已认证\|成功\|login_success"; then
+        echo ""
+        log_success "=========================================="
+        log_success "  认证成功！"
+        log_success "=========================================="
+        echo ""
+        return 0
     fi
 
+    # 没有匹配到任何已知成功响应 → 视为失败
     echo ""
-    log_success "=========================================="
-    log_success "  认证成功！"
-    log_success "=========================================="
+    log_error "认证失败: 服务器返回未知响应"
+    log_info "原始响应: $_result"
     echo ""
-    return 0
+    return 1
 }
