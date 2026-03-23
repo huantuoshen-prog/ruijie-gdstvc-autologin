@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # ========================================
 # 集成测试入口
 # 用法: bash tests/run_tests.sh [unit|integration|all]

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # ========================================
 # Mock HTTP Server for Integration Tests
 # 模拟锐捷 ePortal 认证页面
