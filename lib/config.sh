@@ -42,7 +42,9 @@ save_config() {
     _password="$2"
     _account_type="${3:-student}"
 
-    mkdir -p "$CONFIG_DIR"
+    if [ -n "$CONFIG_DIR" ]; then
+        mkdir -p "$CONFIG_DIR"
+    fi
     cat > "$CONFIG_FILE" << EOF
 # Ruijie Auto-Login Configuration
 # Generated $(date '+%Y-%m-%d %H:%M:%S')

@@ -164,6 +164,8 @@ run_integration_tests() {
     # 测试10: 配置文件权限安全
     . "${PROJECT_DIR}/lib/config.sh"
     _tmp_cfg=$(mktemp)
+    CONFIG_FILE="$_tmp_cfg"
+    CONFIG_DIR="$(dirname "$_tmp_cfg")"
     save_config "u" "p" "student"
     _perms=$(stat -c "%a" "$CONFIG_FILE" 2>/dev/null || stat -f "%Lp" "$CONFIG_FILE" 2>/dev/null)
     if [ "$_perms" = "600" ]; then

@@ -29,7 +29,11 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x ruijie.sh ruijie_student.sh ruijie_teacher.sh lib/*.sh tests/*.sh
+          chmod +x ruijie.sh lib/*.sh tests/*.sh
+          # 创建符号链接（向后兼容）
+          rm -f ruijie_student.sh ruijie_teacher.sh
+          ln -s ruijie.sh ruijie_student.sh
+          ln -s ruijie.sh ruijie_teacher.sh
 
       - name: Unit tests
         run: bash tests/run_tests.sh unit
