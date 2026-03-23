@@ -82,7 +82,7 @@ interactive_config() {
     echo -n "请选择账号类型 [1]学生 [2]教师 (默认: 1): "
     read _choice
     case "$_choice" in
-        2|"") _at="teacher" ;;
+        2) _at="teacher" ;;
         *) _at="student" ;;
     esac
 

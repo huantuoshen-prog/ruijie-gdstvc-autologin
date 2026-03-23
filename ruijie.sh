@@ -84,14 +84,24 @@ parse_args() {
                 ;;
             *)
                 # 如果第一个非选项参数是用户名
-                if [ -z "$USERNAME" ] && [ "$#" -ge 1 ] && [ "$1" != "--"* ]; then
-                    USERNAME="$1"
-                    PASSWORD="${2:-}"
-                    shift
-                    [ -n "$1" ] && [ "$1" != "--"* ] && shift
-                else
-                    shift
-                fi
+                case "$1" in
+                    --*)
+                        shift
+                        ;;
+                    *)
+                        if [ -z "$USERNAME" ]; then
+                            USERNAME="$1"
+                            PASSWORD="${2:-}"
+                            shift
+                            case "$1" in
+                                --*) ;;
+                                *) [ -n "$1" ] && shift ;;
+                            esac
+                        else
+                            shift
+                        fi
+                        ;;
+                esac
                 ;;
         esac
     done

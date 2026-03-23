@@ -29,8 +29,7 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x ruijie.sh lib/*.sh
-          chmod +x tests/*.sh
+          chmod +x ruijie.sh ruijie_student.sh ruijie_teacher.sh lib/*.sh tests/*.sh
 
       - name: Unit tests
         run: bash tests/run_tests.sh unit
