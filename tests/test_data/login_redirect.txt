@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<!DOCTYPE html>
+<html>
+<head><title>ePortal Login</title></head>
+<body>
+<form method="POST" action="/eportal/InterFace.do?method=login">
+<input type="text" name="userId" />
+<input type="password" name="password" />
+<input type="hidden" name="service" value="DianXin" />
+</form>
+</body>
+</html>

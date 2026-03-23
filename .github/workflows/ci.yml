@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: ShellCheck Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run shellcheck on all scripts
+        run: |
+          for f in *.sh lib/*.sh tests/*.sh; do
+            if [ -f "$f" ]; then
+              shellcheck -s sh -x "$f" || exit 1
+            fi
+          done
+
+  test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ruijie.sh lib/*.sh
+          chmod +x tests/*.sh
+
+      - name: Unit tests
+        run: bash tests/run_tests.sh unit
+
+      - name: Integration tests
+        run: bash tests/run_tests.sh integration

@@ -1,35 +1,167 @@
 #!/bin/sh
+# ========================================
+# 锐捷网络认证 - 统一入口脚本
+# 广东科学技术职业学院专用
+# ========================================
 
-#If received parameters is less than 2, print usage
-if [ "${#}" -lt "2" ]; then
-  echo "Usage: ./ruijie_teacher.sh username password"
-  echo "Example: ./ruijie_teacher.sh 10000 12345"
-  exit 1
-fi
+set -e
 
-#Exit the script when is already online, use www.google.cn/generate_204 to check the online status
-captiveReturnCode=`curl -s -I -m 10 -o /dev/null -s -w %{http_code} http://www.google.cn/generate_204`
-if [ "${captiveReturnCode}" = "204" ]; then
-  echo "网络连接成功!"
-  exit 0
-fi
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 
-#If not online, begin Ruijie Auth
+# 加载模块库
+. "${SCRIPT_DIR}/lib/common.sh"
+. "${SCRIPT_DIR}/lib/config.sh"
+. "${SCRIPT_DIR}/lib/network.sh"
+. "${SCRIPT_DIR}/lib/daemon.sh"
 
-#Get Ruijie login page URL
-loginPageURL=`curl -s "http://www.google.cn/generate_204" | awk -F \' '{print $2}'`
+# 默认值
+ACCOUNT_TYPE="student"
+DAEMON_MODE=false
+DAEMON_LOOP_MODE=false
+ACTION=""
 
-#Structure loginURL
-loginURL=`echo ${loginPageURL} | awk -F \? '{print $1}'`
-loginURL="${loginURL/index.jsp/InterFace.do?method=login}"
+# 自动检测调用方式（通过脚本名判断）
+_detect_mode() {
+    _name="$(basename "$0")"
+    case "$_name" in
+        ruijie_student.sh)
+            ACCOUNT_TYPE="student"
+            ;;
+        ruijie_teacher.sh)
+            ACCOUNT_TYPE="teacher"
+            ;;
+        ruijie.sh|*)
+            ACCOUNT_TYPE="student"
+            ;;
+    esac
+}
 
-service="default"
-queryString="wlanuserip=b0ca4cc70a0e85576592b062fd3c8eee&wlanacname=18260f9e92a595cf175b8f228a013c28&ssid=a94b524f709e97ce5d5f6888c069bef5&nasip=2a7140b6682505806cff617bac715e9d&mac=3dc484a0996e1f0641f13bcafc288276&t=wireless-v2&url=c9673a58c390d25634642c279f688e0e49d5976c400918ec156e785c53b4c14a9f9f32aa704ac8c6"
-queryString="${queryString//&/%2526}"
-queryString="${queryString//=/%253D}"
+# 解析命令行参数
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --student)
+                ACCOUNT_TYPE="student"
+                shift
+                ;;
+            --teacher)
+                ACCOUNT_TYPE="teacher"
+                shift
+                ;;
+            -u|--username)
+                USERNAME="$2"
+                shift 2
+                ;;
+            -p|--password)
+                PASSWORD="$2"
+                shift 2
+                ;;
+            -d|--daemon)
+                DAEMON_MODE=true
+                shift
+                ;;
+            --daemon-loop)
+                # 内部使用：守护进程循环模式
+                DAEMON_LOOP_MODE=true
+                shift
+                ;;
+            --stop)
+                ACTION="stop"
+                shift
+                ;;
+            --status)
+                ACTION="status"
+                shift
+                ;;
+            --setup)
+                ACTION="setup"
+                shift
+                ;;
+            -h|--help|help)
+                show_help
+                exit 0
+                ;;
+            *)
+                # 如果第一个非选项参数是用户名
+                if [ -z "$USERNAME" ] && [ "$#" -ge 1 ] && [ "$1" != "--"* ]; then
+                    USERNAME="$1"
+                    PASSWORD="${2:-}"
+                    shift
+                    [ -n "$1" ] && [ "$1" != "--"* ] && shift
+                else
+                    shift
+                fi
+                ;;
+        esac
+    done
+}
 
-#Send Ruijie eportal auth request and output result
-if [ -n "${loginURL}" ]; then
-  authResult=`curl -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.91 Safari/537.36" -e "${loginPageURL}" -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" -d "userId=${1}&password=${2}&service=${service}&queryString=${queryString}&operatorPwd=&operatorUserId=&validcode=&passwordEncrypt=false" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" "${loginURL}"`
-  echo $authResult
-fi
+# 主流程
+main() {
+    # 守护进程状态/停止
+    case "$ACTION" in
+        stop)
+            daemon_stop
+            exit 0
+            ;;
+        status)
+            daemon_status
+            exit 0
+            ;;
+        setup)
+            interactive_config
+            exit 0
+            ;;
+    esac
+
+    # 守护进程模式
+    if [ "$DAEMON_LOOP_MODE" = "true" ]; then
+        daemon_loop
+        exit 0
+    fi
+
+    if [ "$DAEMON_MODE" = "true" ]; then
+        daemon_start
+        exit $?
+    fi
+
+    # 正常登录流程
+    # 打印banner
+    echo ""
+    log_info "=========================================="
+    log_info "  锐捷网络认证助手 v3.0"
+    log_info "  广东科学技术职业学院专用"
+    log_info "=========================================="
+    echo ""
+
+    # 如果没有提供凭据，尝试从配置文件加载
+    if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+        if is_configured; then
+            load_config
+            log_info "已从配置文件加载账号信息"
+        else
+            log_error "未提供用户名和密码，且未找到配置文件"
+            echo ""
+            echo "请使用以下方式之一提供凭据:"
+            echo "  $0 -u 用户名 -p 密码"
+            echo "  $0 用户名 密码"
+            echo "  $0 --setup  (交互式配置)"
+            echo ""
+            exit 1
+        fi
+    fi
+
+    # 如果也指定了账号类型，覆盖配置
+    if [ "$ACCOUNT_TYPE" != "student" ]; then
+        log_info "使用教师账号模式"
+    fi
+
+    # 执行登录
+    do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE"
+}
+
+# 启动
+_detect_mode
+parse_args "$@"
+main

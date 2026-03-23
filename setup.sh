@@ -1,7 +1,7 @@
 #!/bin/sh
-
 # ========================================
-# 锐捷认证自动配置脚本
+# 锐捷认证安装配置脚本 v2.0
+# 广东科学技术职业学院专用
 # 一键安装配置工具
 # ========================================
 
@@ -19,24 +19,35 @@ echo_warning() { echo -e "${YELLOW}[警告]${NC} $1"; }
 echo_error() { echo -e "${RED}[错误]${NC} $1"; }
 echo_step() { echo -e "${CYAN}[步骤]${NC} $1"; }
 
+# 配置目录
+CONFIG_DIR="${HOME}/.config/ruijie"
+CONFIG_FILE="${CONFIG_DIR}/ruijie.conf"
+SCRIPT_DIR="/usr/local/bin"
+SCRIPT_NAME="ruijie-login"
+SYSTEMD_SRC_DIR="$(cd "$(dirname "${0}")" && pwd)/systemd/ruijie.service"
+
 clear
 echo ""
 echo_success "=============================================="
-echo_success "     锐捷网络认证自动配置工具 v1.0"
+echo_success "     锐捷网络认证自动配置工具 v2.0"
 echo_success "     广东科学技术职业学院专用"
 echo_success "=============================================="
 echo ""
 
+# ========================================
 # 检查 root 权限
+# ========================================
 echo_step "检查系统权限..."
 if [ "$(id -u)" -ne 0 ]; then
     echo_error "请使用 root 权限运行此脚本！"
-    echo " sudo sh setup.sh"
+    echo "  sudo sh setup.sh"
     exit 1
 fi
 echo_success "权限检查通过"
 
-# 检查 curl
+# ========================================
+# 检查必要工具
+# ========================================
 echo_step "检查必要工具..."
 if ! command -v curl >/dev/null 2>&1; then
     echo_warning "curl 未安装，正在尝试安装..."
@@ -56,26 +67,63 @@ else
     exit 1
 fi
 
-# 下载主脚本
-echo_step "下载认证脚本..."
-SCRIPT_DIR="/usr/local/bin"
-SCRIPT_NAME="ruijie-login"
+# ========================================
+# 下载/安装主脚本
+# ========================================
+echo_step "安装主脚本..."
 
-mkdir -p "$SCRIPT_DIR"
+# 获取安装源目录（setup.sh 所在目录）
+SETUP_DIR="$(cd "$(dirname "${0}")" && pwd)"
+MAIN_SCRIPT="${SETUP_DIR}/ruijie.sh"
 
-curl -sL "https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/ruijie_student.sh" -o "${SCRIPT_DIR}/${SCRIPT_NAME}"
+if [ -f "$MAIN_SCRIPT" ]; then
+    # 本地安装
+    cp "$MAIN_SCRIPT" "${SCRIPT_DIR}/${SCRIPT_NAME}"
+    # 也复制一份 ruijie.sh (统一入口)
+    cp "$MAIN_SCRIPT" "${SCRIPT_DIR}/ruijie.sh"
 
-if [ -f "${SCRIPT_DIR}/${SCRIPT_NAME}" ]; then
-    chmod +x "${SCRIPT_DIR}/${SCRIPT_NAME}"
-    echo_success "脚本下载成功: ${SCRIPT_DIR}/${SCRIPT_NAME}"
+    # 创建符号链接（向后兼容）
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh"
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh"
+
+    echo_success "主脚本安装成功"
+elif command -v git >/dev/null 2>&1; then
+    # Git clone
+    TEMP_DIR=$(mktemp -d)
+    git clone https://github.com/17388749803/Ruijie-Auto-Login.git "$TEMP_DIR"
+    cp "${TEMP_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie.sh"
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh"
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh"
+    rm -rf "$TEMP_DIR"
+    echo_success "主脚本下载成功"
 else
-    echo_error "脚本下载失败，请检查网络连接"
-    exit 1
+    # 直接下载
+    curl -sL "https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/ruijie.sh" -o "${SCRIPT_DIR}/ruijie.sh"
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh"
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh"
+    echo_success "主脚本下载成功"
 fi
 
+chmod +x "${SCRIPT_DIR}/ruijie.sh"
+chmod +x "${SCRIPT_DIR}/${SCRIPT_NAME}"
+
+# ========================================
+# 交互式账号配置
+# ========================================
 echo ""
 echo_step "请输入校园网账号信息"
 echo ""
+
+# 选择账号类型
+echo "请选择账号类型:"
+echo "  [1] 学生账号 (默认)"
+echo "  [2] 教师账号"
+echo -n "请选择 [1/2]: "
+read account_choice
+case "$account_choice" in
+    2) ACCOUNT_TYPE="teacher" ;;
+    *) ACCOUNT_TYPE="student" ;;
+esac
 
 # 输入账号
 echo -n "请输入用户名 (学号/工号): "
@@ -99,97 +147,136 @@ while [ -z "$password" ]; do
     echo ""
 done
 
-echo ""
 echo_success "账号信息已记录"
 
+# ========================================
+# 保存配置文件 (安全存储)
+# ========================================
+echo_step "保存配置文件..."
+
+mkdir -p "$CONFIG_DIR"
+cat > "$CONFIG_FILE" << EOF
+# Ruijie Auto-Login Configuration
+# Generated $(date '+%Y-%m-%d %H:%M:%S')
+USERNAME=$username
+PASSWORD=$password
+ACCOUNT_TYPE=$ACCOUNT_TYPE
+DAEMON_INTERVAL=300
+EOF
+
+chmod 600 "$CONFIG_FILE"
+echo_success "配置已保存到 $CONFIG_FILE (权限 600)"
+
+# ========================================
 # 测试认证
+# ========================================
 echo ""
 echo_step "正在测试认证..."
-test_result=$("${SCRIPT_DIR}/${SCRIPT_NAME}" "$username" "$password" 2>&1)
+test_result=$("${SCRIPT_DIR}/ruijie.sh" --${ACCOUNT_TYPE} -u "$username" -p "$password" 2>&1)
 
-if echo "$test_result" | grep -q "认证成功\|网络已连接"; then
+if echo "$test_result" | grep -qi "成功\|already"; then
     echo_success "认证测试通过！"
+elif echo "$test_result" | grep -qi "连接"; then
+    echo_success "认证测试通过（网络已连接）！"
 else
     echo_warning "认证测试结果: $test_result"
-    echo_warning "但会继续配置定时任务，你可以稍后手动测试"
+    echo_warning "但会继续配置，你可以稍后手动测试"
 fi
 
+# ========================================
 # 配置定时任务
+# ========================================
 echo ""
-echo_step "配置自动登录任务..."
+echo_step "配置定时任务..."
 
-# 检测系统类型
+# 检测 cron 是否可用
+CRON_CMD=""
 if command -v crontab >/dev/null 2>&1; then
-    CRON_INSTALLED=1
+    CRON_CMD="crontab"
 elif [ -f /etc/crontabs/root ]; then
-    CRON_FILE="/etc/crontabs/root"
-    CRON_INSTALLED=1
-else
-    CRON_INSTALLED=0
+    CRON_CMD="/bin/sh /etc/crontabs/root"
+elif [ -f /etc/crontabs/$(whoami) ]; then
+    CRON_CMD="/bin/sh /etc/crontabs/$(whoami)"
 fi
 
-if [ "$CRON_INSTALLED" = "1" ]; then
-    # 创建日志目录
+if [ -n "$CRON_CMD" ]; then
     mkdir -p /var/log
-    
-    # 添加定时任务: 凌晨5点到7点，每5分钟尝试一次
-    CRON_TASK="*/5 5-7 * * * ${SCRIPT_DIR}/${SCRIPT_NAME} ${username} ${password} >> /var/log/ruijie-login.log 2>&1"
-    
-    # 检查是否已有任务
-    if grep -q "ruijie-login" /etc/crontabs/root 2>/dev/null; then
-        echo_warning "定时任务已存在，先删除旧的..."
-        sed -i '/ruijie-login/d' /etc/crontabs/root 2>/dev/null
+
+    # 安全: 不在 crontab 中存储密码
+    CRON_TASK="*/5 5-7 * * * ${SCRIPT_DIR}/ruijie.sh"
+
+    # 清理旧任务
+    if command -v crontab >/dev/null 2>&1; then
+        crontab -l 2>/dev/null | grep -v "ruijie" | crontab - 2>/dev/null || true
+        echo "$CRON_TASK" >> /dev/null 2>&1 || true
+        # 更安全的方式: 追加新任务
+        (crontab -l 2>/dev/null; echo "$CRON_TASK") | crontab - 2>/dev/null || true
+    elif [ -f /etc/crontabs/root ]; then
+        grep -v "ruijie" /etc/crontabs/root > /tmp/crontab_tmp 2>/dev/null || true
+        echo "$CRON_TASK" >> /tmp/crontab_tmp
+        cp /tmp/crontab_tmp /etc/crontabs/root
+        rm -f /tmp/crontab_tmp
     fi
-    
-    # 添加新任务
-    echo "$CRON_TASK" >> /etc/crontabs/root 2>/dev/null || crontab -l 2>/dev/null | grep -v "ruijie-login" | crontab - 2>/dev/null
-    
-    # 重启 cron 服务
-    if command -v service >/dev/null 2>&1; then
-        service cron restart 2>/dev/null || service crond restart 2>/dev/null
-    elif command -v /etc/init.d/cron >/dev/null 2>&1; then
-        /etc/init.d/cron restart 2>/dev/null
-    fi
-    
+
     echo_success "定时任务配置成功！"
     echo ""
-    echo "自动登录时间: 每天凌晨 5:00 - 7:00"
-    echo "尝试间隔: 每5分钟"
-    echo "日志位置: /var/log/ruijie-login.log"
+    echo "  自动登录时间: 每天凌晨 5:00 - 7:00"
+    echo "  尝试间隔: 每5分钟"
+    echo "  注意: 密码存储在 $CONFIG_FILE 中"
 else
     echo_warning "未检测到 cron 服务，定时任务配置失败"
     echo_info "你可以手动添加以下定时任务:"
     echo ""
-    echo "  */5 5-7 * * * ${SCRIPT_DIR}/${SCRIPT_NAME} ${username} ${password}"
+    echo "  $CRON_TASK"
     echo ""
 fi
 
-# 保存配置信息
-echo_step "保存配置信息..."
-cat > /etc/ruijie.conf << EOF
-# 锐捷认证配置
-USERNAME=$username
-SCRIPT_PATH=${SCRIPT_DIR}/${SCRIPT_NAME}
-EOF
-echo_success "配置已保存到 /etc/ruijie.conf"
+# ========================================
+# systemd 服务安装 (可选)
+# ========================================
+if command -v systemctl >/dev/null 2>&1; then
+    echo ""
+    echo_step "是否安装 systemd 服务? (后台守护进程，自动重连)"
+    echo "  [y] 是，安装 systemd 服务 (推荐)"
+    echo "  [n] 否，跳过"
+    echo -n "请选择 [y/N]: "
+    read systemd_choice
 
-# 常用命令提示
+    if [ "$systemd_choice" = "y" ] || [ "$systemd_choice" = "Y" ]; then
+        if [ -f "$SYSTEMD_SRC_DIR" ]; then
+            cp "$SYSTEMD_SRC_DIR" /etc/systemd/system/ruijie.service
+            systemctl daemon-reload
+            systemctl enable ruijie.service
+            echo_success "systemd 服务已安装并启用"
+            echo ""
+            echo "  启动服务:   systemctl start ruijie"
+            echo "  查看状态:   systemctl status ruijie"
+            echo "  查看日志:   journalctl -u ruijie -f"
+        else
+            echo_warning "systemd 服务文件不存在，跳过"
+        fi
+    fi
+fi
+
+# ========================================
+# 完成
+# ========================================
 echo ""
 echo_success "=============================================="
 echo_success "          配置完成！"
 echo_success "=============================================="
 echo ""
-echo "📖 常用命令:"
+echo "  常用命令:"
 echo ""
-echo "  手动登录: ${SCRIPT_DIR}/${SCRIPT_NAME} 你的用户名 你的密码"
-echo "  或: /etc/ruijie.conf 中配置了默认账号"
+echo "  手动登录:  ruijie.sh -u $username -p [密码]"
+echo "  守护进程:  ruijie.sh --daemon"
+echo "  查看状态:  ruijie.sh --status"
+echo "  停止守护:  ruijie.sh --stop"
+echo "  重新配置:  ruijie.sh --setup"
+echo "  交互帮助:  ruijie.sh --help"
 echo ""
-echo "  查看日志: tail -f /var/log/ruijie-login.log"
-echo "  测试认证: ${SCRIPT_DIR}/${SCRIPT_NAME} ${username} ${password}"
-echo ""
-echo "📝 定时任务:"
-echo "  自动登录时间: 每天 5:00 - 7:00"
-echo "  尝试间隔: 每5分钟"
+echo "  配置文件:  $CONFIG_FILE"
+echo "  日志文件:  /var/log/ruijie-daemon.log"
 echo ""
 echo_success "=============================================="
 echo ""
