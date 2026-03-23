@@ -207,6 +207,21 @@ chmod 600 ~/.config/ruijie/ruijie.conf
 
 ---
 
+## 🗑️ 卸载
+
+```bash
+# 下载卸载脚本
+wget -O uninstall.sh https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/uninstall.sh
+
+# 运行卸载（需要 root 权限）
+chmod +x uninstall.sh
+sudo sh uninstall.sh
+```
+
+卸载内容：守护进程、systemd 服务、脚本文件、配置文件、日志文件。
+
+---
+
 ## 📝 输出示例
 
 ```
@@ -216,9 +231,7 @@ chmod 600 ~/.config/ruijie/ruijie.conf
 ==========================================
 
 [STEP] 检测网络连接状态...
-[INFO] 尝试连接: http://www.google.cn/generate_204
-[OK] 检测成功: HTTP 204
-[OK] 网络已连接，无需认证！
+[WARN] 未检测到网络连接，开始认证流程...
 ```
 
 ---
@@ -231,6 +244,7 @@ Ruijie-Auto-Login/
 ├── ruijie_student.sh      # 符号链接 -> ruijie.sh (向后兼容)
 ├── ruijie_teacher.sh      # 符号链接 -> ruijie.sh (向后兼容)
 ├── setup.sh               # 一键安装配置脚本
+├── uninstall.sh           # 卸载脚本
 ├── lib/
 │   ├── common.sh          # 颜色、日志函数、常量
 │   ├── config.sh          # 配置文件读写 (chmod 600)
