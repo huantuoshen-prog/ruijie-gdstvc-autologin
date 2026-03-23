@@ -11,8 +11,11 @@ is_online() {
     IFS=" "
     for _url in $CHECK_URLS; do
         IFS="$_oldifs"
-        _code=$(curl -s -I -m 5 -o /dev/null -w "%{http_code}" "$_url" 2>/dev/null || echo "000")
-        if [ "$_code" = "204" ] || [ "$_code" = "200" ]; then
+        # 发送 GET 请求（跟随重定向），检查是否有响应体内容
+        # - 有内容 = 真正在线（收到了百度/QQ的实际网页）
+        # - 无内容 = portal 拦截或其他网络问题
+        _body=$(curl -s -L -m 5 "$_url" 2>/dev/null)
+        if [ -n "$_body" ]; then
             return 0
         fi
     done
@@ -26,7 +29,7 @@ get_login_page_url() {
     _url="$1"
     _page=$(curl -s -L -m 10 "$_url" 2>&1)
     if [ -n "$_page" ]; then
-        echo "$_page" | grep -oP "http[^'\"]+" | head -1
+        echo "$_page" | grep -oE "http[^'\"]+" | head -1
     fi
 }
 
@@ -48,11 +51,11 @@ build_login_url() {
 build_query_string() {
     _login_page_url="$1"
 
-    _wlanuserip=$(echo "$_login_page_url" | grep -oP "wlanuserip=[^&]+" | head -1)
-    _wlanacname=$(echo "$_login_page_url" | grep -oP "wlanacname=[^&]+" | head -1)
-    _nasip=$(echo "$_login_page_url" | grep -oP "nasip=[^&]+" | head -1)
-    _mac=$(echo "$_login_page_url" | grep -oP "mac=[^&]+" | head -1)
-    _nasid=$(echo "$_login_page_url" | grep -oP "nasid=[^&]+" | head -1)
+    _wlanuserip=$(echo "$_login_page_url" | grep -oE "wlanuserip=[^&]+" | head -1)
+    _wlanacname=$(echo "$_login_page_url" | grep -oE "wlanacname=[^&]+" | head -1)
+    _nasip=$(echo "$_login_page_url" | grep -oE "nasip=[^&]+" | head -1)
+    _mac=$(echo "$_login_page_url" | grep -oE "mac=[^&]+" | head -1)
+    _nasid=$(echo "$_login_page_url" | grep -oE "nasid=[^&]+" | head -1)
 
     # 提取值
     _wlanuserip_v=$(echo "$_wlanuserip" | cut -d= -f2-)
@@ -87,13 +90,13 @@ send_auth_request() {
     _password="$3"
     _account_type="${4:-student}"
 
-    _query_string="$(build_query_string "$(curl -s -L -m 10 "http://www.google.cn/generate_204" 2>&1 | grep -oP 'http[^"]+' | head -1)")"
+    _query_string="$(build_query_string "$(curl -s -L -m 10 "http://www.baidu.com" 2>&1 | grep -oE "http[^'\"]+" | head -1)")"
     _service="$(get_service_type "$_account_type")"
-    _login_page_url=$(curl -s -I -m 5 -o /dev/null -w "%{redirect_url}" "http://www.google.cn/generate_204" 2>/dev/null)
+    _login_page_url=$(curl -s -I -m 5 -o /dev/null -w "%{redirect_url}" "http://www.baidu.com" 2>/dev/null)
 
     curl -s -L -m 30 \
         -A "$USER_AGENT" \
-        -e "${_login_page_url:-http://www.google.cn}" \
+        -e "${_login_page_url:-http://www.baidu.com}" \
         -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
         -d "userId=${_username}&password=${_password}&service=${_service}&queryString=${_query_string}&operatorPwd=&operatorUserId=&validcode=&passwordEncrypt=false" \
         -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" \
@@ -118,10 +121,10 @@ do_login() {
 
     # 获取认证页面
     log_step "获取认证页面..."
-    _login_page_url=$(curl -s -L -m 10 "http://www.google.cn/generate_204" 2>&1 | grep -oP "http[^\"']+" | head -1)
+    _login_page_url=$(curl -s -L -m 10 "http://www.baidu.com" 2>&1 | grep -oE "http[^\"']+" | head -1)
 
     if [ -z "$_login_page_url" ]; then
-        _login_page_url=$(curl -s -I -L -m 10 "http://www.baidu.com" 2>&1 | grep -i "location" | grep -oP "http[^\"']+" | head -1)
+        _login_page_url=$(curl -s -I -L -m 10 "http://www.baidu.com" 2>&1 | grep -i "location" | grep -oE "http[^\"']+" | head -1)
     fi
 
     if [ -z "$_login_page_url" ]; then

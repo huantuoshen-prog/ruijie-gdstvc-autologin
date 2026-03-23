@@ -34,7 +34,7 @@ log_step() {
 }
 
 # 常量定义
-CHECK_URLS="http://www.google.cn/generate_204 http://www.baidu.com http://www.qq.com"
+CHECK_URLS="http://www.baidu.com http://www.qq.com"
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # 默认配置路径
