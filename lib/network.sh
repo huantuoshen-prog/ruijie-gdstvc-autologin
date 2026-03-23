@@ -4,25 +4,6 @@
 # 多URL检测、登录参数提取、认证请求
 # ========================================
 
-# 检测网络是否已连接
-# 返回: 0=在线, 1=离线
-is_online() {
-    _oldifs="$IFS"
-    IFS=" "
-    for _url in $CHECK_URLS; do
-        IFS="$_oldifs"
-        # 发送 GET 请求（跟随重定向），检查是否有响应体内容
-        # - 有内容 = 真正在线（收到了百度/QQ的实际网页）
-        # - 无内容 = portal 拦截或其他网络问题
-        _body=$(curl -s -L -m 5 "$_url" 2>/dev/null)
-        if [ -n "$_body" ]; then
-            return 0
-        fi
-    done
-    IFS="$_oldifs"
-    return 1
-}
-
 # 获取认证页面URL
 # 返回: 重定向到的登录页面URL
 get_login_page_url() {
@@ -110,14 +91,7 @@ do_login() {
     _password="$2"
     _account_type="${3:-student}"
 
-    log_step "检测网络连接状态..."
-
-    if is_online; then
-        log_success "网络已连接，无需认证！"
-        return 0
-    fi
-
-    log_warning "未检测到网络连接，开始认证流程..."
+    log_step "开始认证流程..."
 
     # 获取认证页面
     log_step "获取认证页面..."
@@ -150,30 +124,29 @@ do_login() {
 
     _result=$(send_auth_request "$_login_url" "$_username" "$_password" "$_account_type")
 
-    # 等待并验证
-    sleep 2
+    # 分析响应内容判断成功与否
+    _error=""
+    if echo "$_result" | grep -qi "password\|密码错误\|用户不存在"; then
+        _error="用户名或密码错误"
+    elif echo "$_result" | grep -qi "验证码"; then
+        _error="需要输入验证码"
+    elif echo "$_result" | grep -qi "locked\|锁定"; then
+        _error="账号已被锁定"
+    elif echo "$_result" | grep -qi "已认证\|成功"; then
+        _error=""
+    fi
 
-    if is_online; then
+    if [ -n "$_error" ]; then
         echo ""
-        log_success "=========================================="
-        log_success "  认证成功！"
-        log_success "  现在可以正常上网了"
-        log_success "=========================================="
-        echo ""
-        return 0
-    else
-        # 分析错误
-        if echo "$_result" | grep -qi "password"; then
-            log_error "认证失败: 用户名或密码错误！"
-        elif echo "$_result" | grep -qi "验证码"; then
-            log_error "认证失败: 需要输入验证码"
-            log_info "当前脚本不支持验证码识别，请使用网页手动认证"
-        elif echo "$_result" | grep -qi "locked\|锁定"; then
-            log_error "账号已被锁定，请稍后再试或联系网络管理员"
-        else
-            log_warning "认证结果未知，请检查"
-        fi
+        log_error "认证失败: $_error"
         echo ""
         return 1
     fi
+
+    echo ""
+    log_success "=========================================="
+    log_success "  认证成功！"
+    log_success "=========================================="
+    echo ""
+    return 0
 }

@@ -92,19 +92,14 @@ daemon_loop() {
     while true; do
         _timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
-        # 尝试登录
-        if is_online; then
-            echo "[$_timestamp] 网络已连接" >> "$LOGFILE" 2>/dev/null || true
-        else
-            echo "[$_timestamp] 检测到断线，开始认证..." >> "$LOGFILE" 2>/dev/null || true
-            _login_result=0
-            do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1 || _login_result=$?
+        # 始终执行认证（is_online 检测不可靠，去掉）
+        _login_result=0
+        do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1 || _login_result=$?
 
-            if [ "$_login_result" = "0" ]; then
-                echo "[$_timestamp] 认证成功" >> "$LOGFILE" 2>/dev/null || true
-            else
-                echo "[$_timestamp] 认证失败 (退出码: $_login_result)" >> "$LOGFILE" 2>/dev/null || true
-            fi
+        if [ "$_login_result" = "0" ]; then
+            echo "[$_timestamp] 认证成功" >> "$LOGFILE" 2>/dev/null || true
+        else
+            echo "[$_timestamp] 认证失败 (退出码: $_login_result)" >> "$LOGFILE" 2>/dev/null || true
         fi
 
         sleep "$_interval"
