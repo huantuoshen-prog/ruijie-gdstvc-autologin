@@ -79,12 +79,15 @@ chmod +x setup.sh
 sudo sh setup.sh
 ```
 
+支持普通 Linux 和 **OpenWrt 路由器**（自动检测）。
+
 配置过程：
 1. ✅ 自动检测系统环境
 2. ✅ 自动下载认证脚本
 3. ✅ **互动式中文界面**，输入账号密码
 4. ✅ 自动测试认证
 5. ✅ 自动配置定时任务
+6. ✅ OpenWrt 自动配置开机自启
 
 ---
 
@@ -318,6 +321,13 @@ crontab -e
 ---
 
 ## 📜 更新日志
+
+### v2.1 (2026-03)
+- `setup.sh` 支持 OpenWrt 路由器（自动检测，安装到 `/etc/ruijie/`）
+- OpenWrt 下自动配置 `/etc/rc.local` 开机同步脚本
+- 修复 `setup.sh` 只复制 `ruijie.sh` 而忽略 `lib/` 目录的问题
+- 定时任务在 OpenWrt 下输出日志到 `/var/log/ruijie-login.log`
+- 跳过 systemd 服务安装（OpenWrt 不使用 systemd）
 
 ### v3.0 (2026-03)
 - 统一入口脚本 `ruijie.sh`（通过 `--student` / `--teacher` 区分）

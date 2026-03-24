@@ -1,8 +1,8 @@
 #!/bin/bash
 # ========================================
-# 锐捷认证安装配置脚本 v2.0
+# 锐捷认证安装配置脚本 v2.1
 # 广东科学技术职业学院专用
-# 一键安装配置工具
+# 支持普通 Linux 和 OpenWrt 路由器
 # ========================================
 
 # 颜色定义
@@ -22,14 +22,25 @@ echo_step() { echo -e "${CYAN}[步骤]${NC} $1"; }
 # 配置目录
 CONFIG_DIR="${HOME}/.config/ruijie"
 CONFIG_FILE="${CONFIG_DIR}/ruijie.conf"
-SCRIPT_DIR="/usr/local/bin"
-SCRIPT_NAME="ruijie-login"
 SYSTEMD_SRC_DIR="$(cd "$(dirname "${0}")" && pwd)/systemd/ruijie.service"
+
+# 检测 OpenWrt 路由器
+is_openwrt() {
+    [ -f /etc/openwrt_release ] || command -v ubus >/dev/null 2>&1
+}
+
+# 设置安装路径
+if is_openwrt; then
+    echo_info "检测到 OpenWrt 路由器环境"
+    SCRIPT_DIR="/etc/ruijie"
+else
+    SCRIPT_DIR="/usr/local/bin"
+fi
 
 clear
 echo ""
 echo_success "=============================================="
-echo_success "     锐捷网络认证自动配置工具 v2.0"
+echo_success "     锐捷网络认证自动配置工具 v2.1"
 echo_success "     广东科学技术职业学院专用"
 echo_success "=============================================="
 echo ""
@@ -74,38 +85,58 @@ echo_step "安装主脚本..."
 
 # 获取安装源目录（setup.sh 所在目录）
 SETUP_DIR="$(cd "$(dirname "${0}")" && pwd)"
-MAIN_SCRIPT="${SETUP_DIR}/ruijie.sh"
 
-if [ -f "$MAIN_SCRIPT" ]; then
-    # 本地安装
-    cp "$MAIN_SCRIPT" "${SCRIPT_DIR}/${SCRIPT_NAME}"
-    # 也复制一份 ruijie.sh (统一入口)
-    cp "$MAIN_SCRIPT" "${SCRIPT_DIR}/ruijie.sh"
+# OpenWrt: 安装到 /etc/ruijie/（持久化）；普通 Linux: 安装到 SCRIPT_DIR
+INSTALL_TARGET="$SCRIPT_DIR"
+OPENWRT_ACTIVE_DIR="/root/ruijie"
 
-    # 创建符号链接（向后兼容）
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh"
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh"
+# 复制整个目录结构（ruijie.sh + lib/）
+install_scripts() {
+    _target="$1"
+    mkdir -p "$_target/lib"
 
-    echo_success "主脚本安装成功"
-elif command -v git >/dev/null 2>&1; then
-    # Git clone
-    TEMP_DIR=$(mktemp -d)
-    git clone https://github.com/17388749803/Ruijie-Auto-Login.git "$TEMP_DIR"
-    cp "${TEMP_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie.sh"
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh"
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh"
-    rm -rf "$TEMP_DIR"
-    echo_success "主脚本下载成功"
-else
-    # 直接下载
-    curl -sL "https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/ruijie.sh" -o "${SCRIPT_DIR}/ruijie.sh"
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh"
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh"
-    echo_success "主脚本下载成功"
+    # 复制所有脚本和 lib/
+    cp "${SETUP_DIR}/ruijie.sh" "$_target/ruijie.sh"
+    cp "${SETUP_DIR}/ruijie_student.sh" "$_target/ruijie_student.sh"
+    cp "${SETUP_DIR}/ruijie_teacher.sh" "$_target/ruijie_teacher.sh"
+
+    for lib in "${SETUP_DIR}/lib"/*.sh; do
+        [ -f "$lib" ] && cp "$lib" "$_target/lib/"
+    done
+
+    chmod +x "$_target/ruijie.sh" "$_target/ruijie_student.sh" "$_target/ruijie_teacher.sh"
+    chmod +x "$_target/lib"/*.sh
+}
+
+# 安装到目标目录
+install_scripts "$INSTALL_TARGET"
+echo_success "脚本安装到 $INSTALL_TARGET"
+
+# OpenWrt 特殊处理: 同步到 /root/（立即生效）
+if is_openwrt; then
+    install_scripts "$OPENWRT_ACTIVE_DIR"
+    echo_success "同步脚本到 $OPENWRT_ACTIVE_DIR (重启后生效)"
+
+    # 设置 /etc/rc.local 开机同步（持久化方案）
+    echo_step "配置开机自启..."
+    if [ -f /etc/rc.local ]; then
+        # 去掉旧的相关行
+        sed -i '/ruijie/d' /etc/rc.local 2>/dev/null || true
+    fi
+    {
+        echo ""
+        echo "# Ruijie auto-login: sync scripts from /etc/ruijie to /root/"
+        echo "[ -d /etc/ruijie ] && cp -r /etc/ruijie /root/ruijie"
+    } >> /etc/rc.local
+    chmod +x /etc/rc.local 2>/dev/null || true
+    echo_success "已配置 /etc/rc.local 开机同步"
 fi
 
-chmod +x "${SCRIPT_DIR}/ruijie.sh"
-chmod +x "${SCRIPT_DIR}/${SCRIPT_NAME}"
+# 创建符号链接（普通 Linux 才需要到 PATH）
+if ! is_openwrt; then
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh" 2>/dev/null || true
+    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh" 2>/dev/null || true
+fi
 
 # ========================================
 # 交互式账号配置
@@ -172,7 +203,11 @@ echo_success "配置已保存到 $CONFIG_FILE (权限 600)"
 # ========================================
 echo ""
 echo_step "正在测试认证..."
-test_result=$("${SCRIPT_DIR}/ruijie.sh" --${ACCOUNT_TYPE} -u "$username" -p "$password" 2>&1)
+TEST_SCRIPT="$INSTALL_TARGET/ruijie.sh"
+if is_openwrt && [ -f "$OPENWRT_ACTIVE_DIR/ruijie.sh" ]; then
+    TEST_SCRIPT="$OPENWRT_ACTIVE_DIR/ruijie.sh"
+fi
+test_result=$("$TEST_SCRIPT" --${ACCOUNT_TYPE} -u "$username" -p "$password" 2>&1)
 
 if echo "$test_result" | grep -qi "成功\|already"; then
     echo_success "认证测试通过！"
@@ -203,7 +238,11 @@ if [ -n "$CRON_CMD" ]; then
     mkdir -p /var/log
 
     # 安全: 不在 crontab 中存储密码
-    CRON_TASK="*/5 5-7 * * * ${SCRIPT_DIR}/ruijie.sh"
+    if is_openwrt; then
+        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh >> /var/log/ruijie-login.log 2>&1"
+    else
+        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh"
+    fi
 
     # 清理旧任务
     if command -v crontab >/dev/null 2>&1; then
@@ -234,7 +273,7 @@ fi
 # ========================================
 # systemd 服务安装 (可选)
 # ========================================
-if command -v systemctl >/dev/null 2>&1; then
+if command -v systemctl >/dev/null 2>&1 && ! is_openwrt; then
     echo ""
     echo_step "是否安装 systemd 服务? (后台守护进程，自动重连)"
     echo "  [y] 是，安装 systemd 服务 (推荐)"
