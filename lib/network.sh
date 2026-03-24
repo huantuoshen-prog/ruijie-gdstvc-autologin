@@ -1,20 +1,10 @@
 #!/bin/bash
 # ========================================
 # 网络检测与认证模块
-# 多URL检测、登录参数提取、认证请求
+# 对齐已验证的工作脚本逻辑
 # ========================================
 
-# 获取认证页面URL
-# 返回: 重定向到的登录页面URL
-get_login_page_url() {
-    _url="$1"
-    _page=$(curl -s -L -m 10 "$_url" 2>&1)
-    if [ -n "$_page" ]; then
-        echo "$_page" | grep -oE "http[^'\"]+" | head -1
-    fi
-}
-
-# 构建认证URL
+# 构建认证URL (从 index.jsp 替换为 InterFace.do?method=login)
 build_login_url() {
     _login_page_url="$1"
     if [ -z "$_login_page_url" ]; then
@@ -28,33 +18,6 @@ build_login_url() {
     echo "$_login_url"
 }
 
-# 动态提取queryString参数
-build_query_string() {
-    _login_page_url="$1"
-
-    _wlanuserip=$(echo "$_login_page_url" | grep -oE "wlanuserip=[^&]+" | head -1)
-    _wlanacname=$(echo "$_login_page_url" | grep -oE "wlanacname=[^&]+" | head -1)
-    _nasip=$(echo "$_login_page_url" | grep -oE "nasip=[^&]+" | head -1)
-    _mac=$(echo "$_login_page_url" | grep -oE "mac=[^&]+" | head -1)
-    _nasid=$(echo "$_login_page_url" | grep -oE "nasid=[^&]+" | head -1)
-
-    # 提取值
-    _wlanuserip_v=$(echo "$_wlanuserip" | cut -d= -f2-)
-    _wlanacname_v=$(echo "$_wlanacname" | cut -d= -f2-)
-    _nasip_v=$(echo "$_nasip" | cut -d= -f2-)
-    _mac_v=$(echo "$_mac" | cut -d= -f2-)
-    _nasid_v=$(echo "$_nasid" | cut -d= -f2-)
-
-    # 构建 queryString
-    _qs="wlanuserip=${_wlanuserip_v}&wlanacname=${_wlanacname_v}&ssid=&nasip=${_nasip_v}&snmpagentip=&mac=${_mac_v}&t=wireless-v2&url=&apmac=&nasid=${_nasid_v}&vid=&port=&nasportid="
-
-    # URL编码 (& -> %2526, = -> %253D)
-    _qs="${_qs//&/%2526}"
-    _qs="${_qs//=/%253D}"
-
-    echo "$_qs"
-}
-
 # 获取服务类型
 get_service_type() {
     _account_type="${1:-student}"
@@ -64,45 +27,33 @@ get_service_type() {
     esac
 }
 
-# 发送认证请求
-send_auth_request() {
-    _login_url="$1"
-    _username="$2"
-    _password="$3"
-    _account_type="${4:-student}"
-
-    _query_string="$(build_query_string "$(curl -s -L -m 10 "http://www.baidu.com" 2>&1 | grep -oE "http[^'\"]+" | head -1)")"
-    _service="$(get_service_type "$_account_type")"
-    _login_page_url=$(curl -s -I -m 5 -o /dev/null -w "%{redirect_url}" "http://www.baidu.com" 2>/dev/null)
-
-    curl -s -L -m 30 \
-        -A "$USER_AGENT" \
-        -e "${_login_page_url:-http://www.baidu.com}" \
-        -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
-        -d "userId=${_username}&password=${_password}&service=${_service}&queryString=${_query_string}&operatorPwd=&operatorUserId=&validcode=&passwordEncrypt=false" \
-        -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" \
-        -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
-        "$_login_url" 2>&1
+# 检查网络是否已连接 (HTTP 204 = 已认证)
+check_network() {
+    _code=$(curl -s -I -m 10 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>/dev/null)
+    [ "$_code" = "204" ]
 }
 
-# 执行完整登录流程
+# 执行完整登录流程 (对齐工作脚本逻辑)
 do_login() {
     _username="$1"
     _password="$2"
     _account_type="${3:-student}"
 
-    log_step "开始认证流程..."
-
-    # 获取认证页面
-    log_step "获取认证页面..."
-    _login_page_url=$(curl -s -L -m 10 "http://www.baidu.com" 2>&1 | grep -oE "http[^\"']+" | head -1)
-
-    if [ -z "$_login_page_url" ]; then
-        _login_page_url=$(curl -s -I -L -m 10 "http://www.baidu.com" 2>&1 | grep -i "location" | grep -oE "http[^\"']+" | head -1)
+    # 检查是否已连接
+    log_step "检查网络连接状态..."
+    if check_network; then
+        log_success "网络连接正常，无需认证"
+        return 0
     fi
 
+    log_warning "未检测到网络连接，开始认证流程..."
+
+    # 获取登录页面URL (对齐工作脚本: curl generate_204 + awk 提取)
+    log_step "获取登录页面URL..."
+    _login_page_url=$(curl -s "http://www.google.cn/generate_204" | awk -F \' '{print $2}')
+
     if [ -z "$_login_page_url" ]; then
-        log_error "无法获取认证页面，请检查网络连接！"
+        log_error "无法获取登录页面URL"
         return 1
     fi
 
@@ -117,47 +68,70 @@ do_login() {
 
     log_info "认证URL: $_login_url"
 
-    # 发送认证请求
-    log_step "正在提交认证信息..."
+    # 从 portal URL 动态提取参数，构建 queryString
+    _wlanuserip=$(echo "$_login_page_url" | grep -oE "wlanuserip=[^&]+" | cut -d= -f2-)
+    _wlanacname=$(echo "$_login_page_url" | grep -oE "wlanacname=[^&]+" | cut -d= -f2-)
+    _nasip=$(echo "$_login_page_url" | grep -oE "nasip=[^&]+" | cut -d= -f2-)
+    _mac=$(echo "$_login_page_url" | grep -oE "mac=[^&]+" | cut -d= -f2-)
+    _nasid=$(echo "$_login_page_url" | grep -oE "nasid=[^&]+" | cut -d= -f2-)
+
+    _queryString="wlanuserip=${_wlanuserip}&wlanacname=${_wlanacname}&ssid=&nasip=${_nasip}&snmpagentip=&mac=${_mac}&t=wireless-v2&url=&apmac=&nasid=${_nasid}&vid=&port=&nasportid="
+    _queryString="${_queryString//&/%2526}"
+    _queryString="${_queryString//=/%253D}"
+
+    _service="$(get_service_type "$_account_type")"
+
+    # 发送认证请求 (对齐工作脚本的 curl 参数)
+    log_step "向认证服务器发送请求..."
     log_info "用户名: $_username"
     log_info "账号类型: $_account_type"
 
-    _result=$(send_auth_request "$_login_url" "$_username" "$_password" "$_account_type")
+    authResult=$(curl -s -A "$USER_AGENT" \
+        -e "${_login_page_url}" \
+        -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
+        -d "userId=${_username}&password=${_password}&service=${_service}&queryString=${_queryString}&operatorPwd=&operatorUserId=&validcode=&passwordEncrypt=false" \
+        -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" \
+        -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
+        "${_login_url}" 2>&1)
 
-    # 调试：输出服务器响应
+    # 解析认证结果 (对齐工作脚本: 检查 JSON result 字段)
     echo ""
-    log_info "服务器响应: $_result"
+    log_step "解析认证服务器响应..."
+
+    if echo "$authResult" | grep -q '"result"'; then
+        _result=$(echo "$authResult" | grep -o '"result":"[^"]*"' | cut -d'"' -f4)
+        _message=$(echo "$authResult" | grep -o '"message":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "无详细信息")
+
+        if [ "$_result" = "success" ]; then
+            log_success "认证成功! 服务器消息: $_message"
+        else
+            log_error "认证失败! 错误信息: $_message"
+            echo ""
+            return 1
+        fi
+    else
+        # 非JSON响应
+        log_info "服务器响应: $authResult"
+    fi
+
     echo ""
 
-    # 分析响应内容 —— 只有明确成功才视为成功
-    if echo "$_result" | grep -qi "password\|密码错误\|用户不存在\|用户名或密码错误"; then
-        echo ""
-        log_error "认证失败: 用户名或密码错误"
-        echo ""
-        return 1
-    elif echo "$_result" | grep -qi "验证码"; then
-        echo ""
-        log_error "认证失败: 需要输入验证码"
-        echo ""
-        return 1
-    elif echo "$_result" | grep -qi "locked\|锁定"; then
-        echo ""
-        log_error "认证失败: 账号已被锁定"
-        echo ""
-        return 1
-    elif echo "$_result" | grep -qi "已认证\|成功\|login_success"; then
+    # 验证认证结果 (对齐工作脚本: sleep 2 后检查 HTTP 204)
+    log_step "验证网络连接状态..."
+    sleep 2
+
+    if check_network; then
         echo ""
         log_success "=========================================="
-        log_success "  认证成功！"
+        log_success "  校园网认证成功，网络已连接!"
         log_success "=========================================="
         echo ""
         return 0
+    else
+        echo ""
+        log_error "认证可能未成功，网络连接失败"
+        log_warning "请检查用户名和密码是否正确"
+        echo ""
+        return 1
     fi
-
-    # 没有匹配到任何已知成功响应 → 视为失败
-    echo ""
-    log_error "认证失败: 服务器返回未知响应"
-    log_info "原始响应: $_result"
-    echo ""
-    return 1
 }
