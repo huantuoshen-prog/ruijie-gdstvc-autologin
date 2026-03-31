@@ -48,6 +48,37 @@ fix_config_perms() {
     fi
 }
 
+# ========================================
+# 代理相关常量和工具函数
+# ========================================
+
+# 默认不经过代理的目标（锐捷认证必须直连）
+DEFAULT_NO_PROXY="www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com"
+
+# 合并默认 + 用户配置的 NO_PROXY_LIST
+get_no_proxy_list() {
+    _user_list="${NO_PROXY_LIST:-}"
+    if [ -n "$_user_list" ]; then
+        echo "${DEFAULT_NO_PROXY},${_user_list}"
+    else
+        echo "$DEFAULT_NO_PROXY"
+    fi
+}
+
+# curl 统一代理包装：配置了 PROXY_URL 则走代理，否则直连
+# 支持 EXTRA_NO_PROXY 环境变量追加额外的 no_proxy 条目
+curl_with_proxy() {
+    _proxy="${PROXY_URL:-}"
+    if [ -z "$_proxy" ]; then
+        curl "$@"
+    else
+        _noproxy="$(get_no_proxy_list)"
+        _extra="${EXTRA_NO_PROXY:-}"
+        [ -n "$_extra" ] && _noproxy="${_noproxy},${_extra}"
+        curl --proxy "$_proxy" --noproxy "$_noproxy" "$@"
+    fi
+}
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -60,6 +91,7 @@ show_help() {
   --teacher            使用教师账号模式
   -u, --username 用户名  指定用户名
   -p, --password 密码   指定密码
+  --proxy URL          设置 HTTP 代理地址（如 http://127.0.0.1:7890）
   -d, --daemon          以后台守护进程模式运行
   --stop               停止守护进程
   --status             查看守护进程状态
@@ -69,6 +101,7 @@ show_help() {
 示例:
   $0 --student -u 2023000001 -p 123456
   $0 --teacher -u T00001 -p 123456
+  $0 --proxy http://127.0.0.1:7890 --student -u 2023000001 -p 123456
   $0 --daemon
   $0 --setup
 

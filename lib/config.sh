@@ -32,6 +32,9 @@ _cfg_load() {
                     ''|*[!0-9]*) DAEMON_INTERVAL=300 ;;
                     *) DAEMON_INTERVAL="$value" ;;
                 esac ;;
+            PROXY_URL)     PROXY_URL="$value" ;;
+            PROXY_URL_HTTPS) PROXY_URL_HTTPS="$value" ;;
+            NO_PROXY_LIST) NO_PROXY_LIST="$value" ;;
         esac
     done < "$_cfg_file"
 }
@@ -52,6 +55,13 @@ USERNAME=$_username
 PASSWORD=$_password
 ACCOUNT_TYPE=$_account_type
 DAEMON_INTERVAL=${DAEMON_INTERVAL:-300}
+
+# --- Proxy Settings ---
+# HTTP proxy, empty = no proxy (default)
+PROXY_URL=${PROXY_URL:-}
+PROXY_URL_HTTPS=${PROXY_URL_HTTPS:-}
+# Bypass proxy for these targets (comma-separated)
+NO_PROXY_LIST=${NO_PROXY_LIST:-www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com}
 EOF
     chmod 600 "$CONFIG_FILE"
 }
@@ -105,6 +115,27 @@ interactive_config() {
         read -s _password
         echo ""
     done
+
+    echo ""
+    echo -n "是否配置 HTTP 代理？直接回车跳过（不使用代理）: "
+    read _proxy_url
+    if [ -n "$_proxy_url" ]; then
+        PROXY_URL="$_proxy_url"
+        echo -n "HTTPS 代理（回车则同 HTTP）: "
+        read _proxy_https
+        PROXY_URL_HTTPS="${_proxy_https:-$_proxy_url}"
+        echo -n "不走代理的地址（逗号分隔，回车用默认值）: "
+        read _no_proxy
+        if [ -z "$_no_proxy" ]; then
+            NO_PROXY_LIST="www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com"
+        else
+            NO_PROXY_LIST="$_no_proxy"
+        fi
+    else
+        PROXY_URL=""
+        PROXY_URL_HTTPS=""
+        NO_PROXY_LIST="www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com"
+    fi
 
     save_config "$_username" "$_password" "$_at"
     log_success "配置已保存到 $CONFIG_FILE"

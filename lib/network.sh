@@ -29,7 +29,7 @@ get_service_type() {
 
 # 检查网络是否已连接 (HTTP 204 = 已认证)
 check_network() {
-    _code=$(curl -s -I -m 10 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>/dev/null)
+    _code=$(curl_with_proxy -s -I -m 10 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>/dev/null)
     [ "$_code" = "204" ]
 }
 
@@ -50,7 +50,7 @@ do_login() {
 
     # 获取登录页面URL (对齐工作脚本: curl generate_204 + awk 提取)
     log_step "获取登录页面URL..."
-    _login_page_url=$(curl -s "http://www.google.cn/generate_204" | awk -F \' '{print $2}')
+    _login_page_url=$(curl_with_proxy -s "http://www.google.cn/generate_204" | awk -F \' '{print $2}')
 
     if [ -z "$_login_page_url" ]; then
         log_error "无法获取登录页面URL"
@@ -58,6 +58,12 @@ do_login() {
     fi
 
     log_success "获取成功: $_login_page_url"
+
+    # 动态提取 portal 域名，追加到当次 no_proxy（防御性措施）
+    _portal_host="$(echo "$_login_page_url" | sed -E 's|^https?://([^/:]+).*$|\1|')"
+    if [ -n "$_portal_host" ] && ! echo "$(get_no_proxy_list)" | grep -q "$_portal_host"; then
+        export EXTRA_NO_PROXY="$_portal_host"
+    fi
 
     # 构建登录URL
     _login_url="$(build_login_url "$_login_page_url")"
@@ -86,13 +92,16 @@ do_login() {
     log_info "用户名: $_username"
     log_info "账号类型: $_account_type"
 
-    authResult=$(curl -s -A "$USER_AGENT" \
+    authResult=$(curl_with_proxy -s -A "$USER_AGENT" \
         -e "${_login_page_url}" \
         -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
         -d "userId=${_username}&password=${_password}&service=${_service}&queryString=${_queryString}&operatorPwd=&operatorUserId=&validcode=&passwordEncrypt=false" \
         -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" \
         -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
         "${_login_url}" 2>&1)
+
+    # 清理当次动态追加的 no_proxy
+    unset EXTRA_NO_PROXY
 
     # 解析认证结果 (对齐工作脚本: 检查 JSON result 字段)
     echo ""

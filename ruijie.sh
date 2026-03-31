@@ -57,6 +57,10 @@ parse_args() {
                 PASSWORD="$2"
                 shift 2
                 ;;
+            --proxy)
+                PROXY_URL="$2"
+                shift 2
+                ;;
             -d|--daemon)
                 DAEMON_MODE=true
                 shift

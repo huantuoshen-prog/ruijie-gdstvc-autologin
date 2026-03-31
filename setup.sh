@@ -178,6 +178,23 @@ while [ -z "$password" ]; do
     echo ""
 done
 
+# 代理配置（可选）
+echo ""
+echo_info "代理设置（可选，直接回车跳过）:"
+echo "  例如: http://127.0.0.1:7890  或  socks5://127.0.0.1:1080"
+echo -n "HTTP 代理地址: "
+read proxy_url_input
+
+if [ -n "$proxy_url_input" ]; then
+    proxy_https_input=""
+    echo -n "HTTPS 代理地址（回车同 HTTP）: "
+    read proxy_https_input
+    proxy_https_val="${proxy_https_input:-$proxy_url_input}"
+
+    echo -n "不走代理的地址（逗号分隔，回车用默认值）: "
+    read no_proxy_input
+fi
+
 echo_success "账号信息已记录"
 
 # ========================================
@@ -193,6 +210,13 @@ USERNAME=$username
 PASSWORD=$password
 ACCOUNT_TYPE=$ACCOUNT_TYPE
 DAEMON_INTERVAL=300
+
+# --- Proxy Settings ---
+# HTTP proxy, empty = no proxy (default)
+PROXY_URL=${proxy_url_input:-}
+PROXY_URL_HTTPS=${proxy_https_val:-}
+# Bypass proxy for these targets (comma-separated)
+NO_PROXY_LIST=${no_proxy_input:-www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com}
 EOF
 
 chmod 600 "$CONFIG_FILE"
@@ -308,6 +332,9 @@ echo ""
 echo "  常用命令:"
 echo ""
 echo "  手动登录:  ruijie.sh -u $username -p [密码]"
+if [ -n "$proxy_url_input" ]; then
+echo "  使用代理:  ruijie.sh --proxy $proxy_url_input -u $username -p [密码]"
+fi
 echo "  守护进程:  ruijie.sh --daemon"
 echo "  查看状态:  ruijie.sh --status"
 echo "  停止守护:  ruijie.sh --stop"
