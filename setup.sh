@@ -1,9 +1,27 @@
 #!/bin/bash
 # ========================================
-# 锐捷认证安装配置脚本 v2.1
+# 锐捷认证安装配置脚本 v3.1
 # 广东科学技术职业学院专用
 # 支持普通 Linux 和 OpenWrt 路由器
 # ========================================
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  锐捷网络认证配置工具"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  本脚本需要在路由器上运行，不是你的电脑！"
+echo ""
+echo "  运行前请确保："
+echo "    1. 路由器 WAN 口已通过网线连接到校园网"
+echo "    2. 你已经通过 SSH 或路由器 Web 后台进入终端"
+echo ""
+echo "  不知道什么是 SSH 或路由器后台？"
+echo "  请先阅读 README 中的【第一步：进入路由器】"
+echo ""
+read -p "按回车继续，或按 Ctrl+C 退出: "
+
+clear
 
 # 颜色定义
 RED='\033[0;31m'
@@ -40,7 +58,7 @@ fi
 clear
 echo ""
 echo_success "=============================================="
-echo_success "     锐捷网络认证自动配置工具 v2.1"
+echo_success "     锐捷网络认证自动配置工具 v3.1"
 echo_success "     广东科学技术职业学院专用"
 echo_success "=============================================="
 echo ""
@@ -118,18 +136,19 @@ if is_openwrt; then
     echo_success "同步脚本到 $OPENWRT_ACTIVE_DIR (重启后生效)"
 
     # 设置 /etc/rc.local 开机同步（持久化方案）
-    echo_step "配置开机自启..."
-    if [ -f /etc/rc.local ]; then
-        # 去掉旧的相关行
+    if grep -qF "# ruijie-auto-login" /etc/rc.local 2>/dev/null; then
+        echo_info "rc.local 已配置开机自启，跳过"
+    else
+        echo_info "配置开机自启..."
         sed -i '/ruijie/d' /etc/rc.local 2>/dev/null || true
+        {
+            echo ""
+            echo "# ruijie-auto-login"
+            echo "[ -d /etc/ruijie ] && cp -r /etc/ruijie /root/ruijie"
+        } >> /etc/rc.local
+        chmod +x /etc/rc.local 2>/dev/null || true
+        echo_success "已配置 /etc/rc.local 开机同步"
     fi
-    {
-        echo ""
-        echo "# Ruijie auto-login: sync scripts from /etc/ruijie to /root/"
-        echo "[ -d /etc/ruijie ] && cp -r /etc/ruijie /root/ruijie"
-    } >> /etc/rc.local
-    chmod +x /etc/rc.local 2>/dev/null || true
-    echo_success "已配置 /etc/rc.local 开机同步"
 fi
 
 # 创建符号链接（普通 Linux 才需要到 PATH）
@@ -181,8 +200,9 @@ done
 # 代理配置（可选）
 echo ""
 echo_info "代理设置（可选，直接回车跳过）:"
-echo "  例如: http://127.0.0.1:7890  或  socks5://127.0.0.1:1080"
-echo -n "HTTP 代理地址: "
+echo "  提示：国内校园网通常不需要代理，直接回车即可"
+echo "  如果你需要翻墙或使用特殊网络，才需要填写"
+echo -n "HTTP 代理地址（直接回车跳过）: "
 read proxy_url_input
 
 if [ -n "$proxy_url_input" ]; then
@@ -233,13 +253,23 @@ if is_openwrt && [ -f "$OPENWRT_ACTIVE_DIR/ruijie.sh" ]; then
 fi
 test_result=$("$TEST_SCRIPT" --${ACCOUNT_TYPE} -u "$username" -p "$password" 2>&1)
 
-if echo "$test_result" | grep -qi "成功\|already"; then
+if echo "$test_result" | grep -qi "认证成功\|网络连接正常\|already\|无需认证"; then
     echo_success "认证测试通过！"
-elif echo "$test_result" | grep -qi "连接"; then
-    echo_success "认证测试通过（网络已连接）！"
+elif echo "$test_result" | grep -qi "连接正常"; then
+    echo_success "认证测试通过（网络已在线）！"
 else
-    echo_warning "认证测试结果: $test_result"
-    echo_warning "但会继续配置，你可以稍后手动测试"
+    echo ""
+    echo_warning "认证测试未完全成功，服务器返回如下:"
+    echo "----------------------------------------"
+    echo "$test_result" | head -20
+    echo "----------------------------------------"
+    echo ""
+    read -p "是否仍要继续完成安装？(y/N，默认N): " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo_info "已取消安装，请检查账号密码后重新运行"
+        exit 1
+    fi
+    echo_info "继续完成安装..."
 fi
 
 # ========================================
@@ -268,30 +298,56 @@ if [ -n "$CRON_CMD" ]; then
         CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh"
     fi
 
-    # 清理旧任务
-    if command -v crontab >/dev/null 2>&1; then
-        crontab -l 2>/dev/null | grep -v "ruijie" | crontab - 2>/dev/null || true
-        echo "$CRON_TASK" >> /dev/null 2>&1 || true
-        # 更安全的方式: 追加新任务
-        (crontab -l 2>/dev/null; echo "$CRON_TASK") | crontab - 2>/dev/null || true
-    elif [ -f /etc/crontabs/root ]; then
-        grep -v "ruijie" /etc/crontabs/root > /tmp/crontab_tmp 2>/dev/null || true
-        echo "$CRON_TASK" >> /tmp/crontab_tmp
-        cp /tmp/crontab_tmp /etc/crontabs/root
-        rm -f /tmp/crontab_tmp
-    fi
+# 安装 crontab 任务的原子操作函数
+# 用法: install_cron_task "cron_entry_string"
+install_cron_task() {
+    _task="$1"
+    _tmpfile=$(mktemp) || return 1
 
-    echo_success "定时任务配置成功！"
-    echo ""
-    echo "  自动登录时间: 每天凌晨 5:00 - 7:00"
-    echo "  尝试间隔: 每5分钟"
-    echo "  注意: 密码存储在 $CONFIG_FILE 中"
-else
-    echo_warning "未检测到 cron 服务，定时任务配置失败"
-    echo_info "你可以手动添加以下定时任务:"
-    echo ""
-    echo "  $CRON_TASK"
-    echo ""
+    if command -v crontab >/dev/null 2>&1; then
+        # 普通 Linux: crontab 命令
+        # 原子操作：读取 → 过滤 → 写入临时文件 → crontab < tmpfile
+        crontab -l 2>/dev/null | grep -vF "$_task" > "$_tmpfile"
+        if [ $? -eq 2 ]; then
+            # grep 返回2表示文件不存在（非严重错误）
+            : > "$_tmpfile"
+        fi
+        echo "# ruijie-auto-login" >> "$_tmpfile"
+        echo "$_task" >> "$_tmpfile"
+
+        if crontab "$_tmpfile" 2>/dev/null; then
+            echo_success "定时任务已安装"
+        else
+            echo_error "定时任务安装失败（crontab 命令错误或权限不足）"
+            rm -f "$_tmpfile"
+            return 1
+        fi
+        rm -f "$_tmpfile"
+
+    elif [ -f /etc/crontabs/root ]; then
+        # OpenWrt 方式
+        if grep -qF "$_task" /etc/crontabs/root 2>/dev/null; then
+            echo_info "定时任务已存在，跳过"
+            rm -f "$_tmpfile"
+            return 0
+        fi
+        {
+            echo ""
+            echo "# ruijie-auto-login"
+            echo "$_task"
+        } >> /etc/crontabs/root 2>/dev/null \
+            && echo_success "定时任务已安装" \
+            || { echo_error "定时任务安装失败"; rm -f "$_tmpfile"; return 1; }
+        rm -f "$_tmpfile"
+    else
+        echo_warning "未找到 crontab，不配置定时任务"
+        rm -f "$_tmpfile"
+        return 1
+    fi
+}
+
+if [ -n "$CRON_TASK" ]; then
+    install_cron_task "$CRON_TASK" || echo_warning "定时任务配置未成功，可稍后手动添加"
 fi
 
 # ========================================
@@ -329,20 +385,20 @@ echo_success "=============================================="
 echo_success "          配置完成！"
 echo_success "=============================================="
 echo ""
-echo "  常用命令:"
+echo "下一步："
 echo ""
-echo "  手动登录:  ruijie.sh -u $username -p [密码]"
-if [ -n "$proxy_url_input" ]; then
-echo "  使用代理:  ruijie.sh --proxy $proxy_url_input -u $username -p [密码]"
-fi
-echo "  守护进程:  ruijie.sh --daemon"
-echo "  查看状态:  ruijie.sh --status"
-echo "  停止守护:  ruijie.sh --stop"
-echo "  重新配置:  ruijie.sh --setup"
-echo "  交互帮助:  ruijie.sh --help"
+echo "  1. 启动守护进程（断线自动重连，推荐）:"
+echo "     cd /etc/ruijie && ./ruijie.sh --daemon"
 echo ""
-echo "  配置文件:  $CONFIG_FILE"
-echo "  日志文件:  /var/log/ruijie-daemon.log"
+echo "  2. 查看运行状态:"
+echo "     ./ruijie.sh --status"
+echo ""
+echo "  3. 如遇问题，查看日志:"
+echo "     tail -f /var/log/ruijie-daemon.log"
+echo "     （按 Ctrl+C 退出日志）"
+echo ""
+echo "  4. 如需重新配置:"
+echo "     ./ruijie.sh --setup"
 echo ""
 echo_success "=============================================="
 echo ""

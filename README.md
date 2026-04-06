@@ -1,9 +1,345 @@
 # Ruijie-Auto-Login 🔐
 
-> 广东科学技术职业学院(广科/科干) 锐捷Web认证脚本 v3.0
+> 广东科学技术职业学院（珠海校区/广州校区）锐捷 Web 认证自动登录工具 v3.1
 
-![GitHub](https://img.shields.io/github/license/17388749803/Ruijie-Auto-Login)
-![GitHub stars](https://img.shields.io/github/stars/17388749803/Ruijie-Auto-Login)
+---
+
+## 这个脚本是干什么的？
+
+你宿舍墙上的网线插上电脑或路由器后，浏览器会弹出一个页面，要求输入学号和密码，点击登录后才能上网。这个页面叫**锐捷 Web 认证**。
+
+每次断开重连（比如路由器重启）都要重新点一遍。
+
+**这个脚本帮你自动完成这个登录步骤。**
+
+---
+
+## 我的网络是什么样的？
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                          │
+│           校园网（锐捷认证服务器）                         │
+│           识别连接到它的是哪个设备：看 MAC 地址              │
+│                                                          │
+└─────────────────────────┬───────────────────────────────┘
+                          │ 墙壁网线
+                          │
+┌─────────────────────────▼───────────────────────────────┐
+│                                                          │
+│              你的 OpenWrt 路由器                           │
+│                                                          │
+│   WAN 口  ────── 连接校园网（墙壁网线）                    │
+│                                                          │
+│   LAN 口 / WiFi  ──── 连接你的所有设备                    │
+│                    （手机、电脑、游戏机等）                  │
+│                                                          │
+│   路由器只向校园网暴露自己的 MAC 地址                      │
+│   所以：多台设备连接路由器，但校园网只算一台设备上网         │
+│                                                          │
+│   ↑ 在路由器上运行这个脚本，自动完成校园网认证              │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+**简单说：**
+- 你自己的电脑直接连校园网 → 只能一台设备上网，多了会被检测
+- 插上 OpenWrt 路由器 → 所有设备都能上网，路由器帮你完成认证
+
+---
+
+## 我需要准备什么？
+
+### 硬件
+
+| 设备 | 需要 | 说明 |
+|------|------|------|
+| OpenWrt 路由器 | ✅ 必须 | 普通路由器（小米/TP-Link 等）**不能**用，需要刷了 OpenWrt 系统 |
+| 网线 | ✅ 必须 | 连接路由器 WAN 口和墙壁网线 |
+| 电脑或手机 | ✅ 必须 | 用于连接路由器 WiFi/网线上网 |
+
+### OpenWrt 路由器从哪来？
+
+有两个选择：
+
+**选择一：买一台支持 OpenWrt 的路由器（推荐）**
+- 直接买已刷好 OpenWrt 的路由器（如友善 NanoPi R系列、GL.iNet、小米 AX3600 刷机）
+- 在学校周边的电脑店或闲鱼可以问问
+
+**选择二：把你现有的路由器刷成 OpenWrt**
+- 前提：你的路由器型号支持刷 OpenWrt（去 OpenWrt 官网查）
+- 刷机有风险，操作需谨慎
+- 如果你不知道什么是刷机，建议直接买一台
+
+### 知识要求
+
+本脚本全程在**终端**（一种文字界面）里运行。你不需要会编程，只需要能复制粘贴命令。
+
+---
+
+## 第一步：进入路由器
+
+有两种方式进入路由器终端，任选一种：
+
+### 方式 A：通过 Web 后台（适合大多数用户）
+
+1. 把路由器 WAN 口连上网线
+2. 电脑或手机连接路由器的 WiFi
+3. 打开浏览器，访问 `192.168.1.1` 或 `192.168.5.1`（不同路由器地址不同，路由器背面有写）
+4. 输入路由器后台账号密码登录
+5. 找到「系统」→「TTYD 终端」或「系统工具」→「命令行终端」
+6. 进入后看到黑色/蓝色的文字界面即可
+
+### 方式 B：通过 SSH（适合进阶用户）
+
+1. 下载并安装 [PuTTY](https://www.putty.org/)（Windows）或直接用 Mac/Linux 的「终端」应用
+2.PuTTY 填写：
+   - Host Name: `192.168.1.1`
+   - Port: `22`
+   - Connection type: `SSH`
+3. 点击 Open，在弹窗中输入路由器用户名和密码（默认通常是 `root`，密码是你在后台设置的）
+
+**你看到的光标闪烁的黑色界面，就是「终端」。** 接下来的所有命令都在这里运行。
+
+---
+
+## 第二步：下载并运行脚本
+
+> ⚠️ **以下命令都在路由器的终端里运行，不要在你自己的电脑/手机终端里运行！**
+
+### 2.1 下载脚本
+
+复制以下命令，粘贴到路由器终端，按回车：
+
+```bash
+wget -O setup.sh https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/setup.sh
+```
+
+**这条命令是什么意思？**
+- `wget` = 从网上下载文件
+- `-O setup.sh` = 下载后保存为 `setup.sh` 这个文件名
+- 后面的网址 = 文件在 GitHub 上的下载地址
+
+### 2.2 给脚本添加执行权限
+
+```bash
+chmod +x setup.sh
+```
+
+**这条命令是什么意思？**
+- `chmod` = 改变文件权限
+- `+x` = 加上「可执行」权限
+- 这步相当于告诉系统「这个文件是个程序，可以运行」
+
+### 2.3 运行配置脚本
+
+```bash
+sh setup.sh
+```
+
+**这条命令是什么意思？**
+- `sh` = 用 bash 解释器运行脚本
+- `setup.sh` = 要运行的文件名
+
+运行后脚本会一步步提示你输入：
+1. 你的学号
+2. 你的校园网密码
+3. 是否设置代理（校园网一般不用代理，直接回车跳过）
+
+输入密码时屏幕**不会显示任何字符**，这是正常的安全设计，输入完直接回车即可。
+
+---
+
+## 第三步：启动认证
+
+脚本配置完成后，依次运行以下命令：
+
+```bash
+# 进入脚本所在目录
+cd /etc/ruijie
+
+# 启动认证（第一次会弹出日志，几秒后显示"认证成功"）
+./ruijie.sh
+
+# 启动后台守护进程（断线自动重连，推荐）
+./ruijie.sh --daemon
+```
+
+启动守护进程后，即使网络断开，路由器也会自动重新认证，不需要你再操作。
+
+---
+
+## 验证是否成功
+
+```bash
+# 查看当前状态
+./ruijie.sh --status
+```
+
+如果看到「已连接」或「运行中」，说明成功了。
+
+---
+
+## 常见问题
+
+### 提示"需要 root 权限"
+
+运行 `setup.sh` 时需要管理员权限。如果提示权限不足，在命令前面加 `sudo`：
+
+```bash
+sudo sh setup.sh
+```
+
+### 认证失败（账号密码错误）
+
+```
+1. 确认学号和密码输入正确（注意大小写）
+2. 确认账号没有欠费
+3. 确认当前连接的是电信网络（其他运营商可能不支持）
+4. 如果换了路由器或改了密码，需要重新运行 ./ruijie.sh --setup
+```
+
+### 提示"curl 未安装"
+
+在 OpenWrt 上运行以下命令安装 curl：
+
+```bash
+opkg update && opkg install curl
+```
+
+### 提示"找不到配置文件"
+
+```
+1. 确认 setup.sh 是在路由器终端运行的，不是在你自己的电脑上
+2. 确认你用的是 root 账号登录
+3. 运行 ls ~/.config/ruijie/ 查看配置文件是否存在
+```
+
+### 守护进程没启动 / 断网了没重连
+
+查看日志：
+
+```bash
+tail -f /var/log/ruijie-daemon.log
+```
+
+按 `Ctrl+C` 可以退出日志查看。
+
+或者在 Web 后台查看：系统 → 日志
+
+### 浏览器仍然弹出认证页面
+
+```
+1. 先在路由器上运行 ./ruijie.sh --status 确认路由器已认证
+2. 断开电脑/手机的 WiFi，重新连接
+3. 清除浏览器缓存（快捷键 Ctrl+Shift+Delete）
+4. 重启浏览器
+```
+
+### 联通网络用户不能用？
+
+请到 [GitHub Issues](https://github.com/17388749803/Ruijie-Auto-Login/issues) 反馈，并说明是哪个宿舍楼。
+
+---
+
+## 进阶用法
+
+### 查看网络状态
+
+```bash
+./ruijie.sh --status
+# 或
+./ruijie.sh --info
+```
+
+### 手动下线（断开网络连接）
+
+```bash
+./ruijie.sh --logout
+```
+
+### 查看版本号
+
+```bash
+./ruijie.sh --version
+```
+
+### 调试模式（认证失败时使用）
+
+```bash
+./ruijie.sh -v
+```
+
+加上 `-v` 参数会显示详细的中间过程，方便排查问题。
+
+### 重新配置账号
+
+```bash
+./ruijie.sh --setup
+```
+
+---
+
+## 命令行参数一览
+
+| 参数 | 说明 |
+|------|------|
+| `--student` | 使用学生账号（默认） |
+| `--teacher` | 使用教师账号 |
+| `-u 用户名 -p 密码` | 直接指定账号密码 |
+| `--daemon` | 启动后台守护进程（断线自动重连） |
+| `--stop` | 停止守护进程 |
+| `--status` / `--info` | 查看网络和认证状态 |
+| `--logout` | 下线（断开连接） |
+| `--setup` | 重新配置账号 |
+| `-v` / `--verbose` | 显示详细调试信息 |
+| `-h` / `--help` | 显示帮助 |
+| `--version` | 显示版本号 |
+
+---
+
+## 工作原理（技术说明，可跳过）
+
+本脚本模拟浏览器完成锐捷 Web 认证的 POST 请求，具体步骤：
+
+1. 向 `http://www.google.cn/generate_204` 发送请求
+2. 服务器返回重定向，携带登录页面 URL（内含认证参数）
+3. 从 URL 中提取 `wlanuserip`、`nasip`、`mac` 等设备参数
+4. 用学号、密码组装 POST 请求，发送到认证接口
+5. 解析服务器返回的 JSON 响应，判断是否成功
+6. 再次访问 `generate_204` 确认网络已连通
+
+认证完成后，所有通过路由器上网的设备都共享这一个认证身份（NAT 转换）。
+
+---
+
+## 🏢 校园网运营商信息
+
+| 宿舍楼 | 运营商 |
+|--------|--------|
+| 9栋 - 22栋 | 联通 |
+| 其他楼栋 | 电信 |
+
+---
+
+## 项目结构
+
+```
+Ruijie-Auto-Login/
+├── ruijie.sh              # 统一入口脚本
+├── ruijie_student.sh      # 符号链接 -> ruijie.sh
+├── ruijie_teacher.sh      # 符号链接 -> ruijie.sh
+├── setup.sh               # 一键安装配置脚本
+├── uninstall.sh            # 卸载脚本
+├── lib/
+│   ├── common.sh           # 颜色、日志函数、常量
+│   ├── config.sh          # 配置文件读写
+│   ├── network.sh          # 网络检测、认证请求
+│   └── daemon.sh           # 守护进程管理
+├── systemd/
+│   └── ruijie.service     # systemd 服务文件
+└── tests/                  # 测试套件
+```
 
 ---
 
@@ -13,358 +349,21 @@
 
 ---
 
-## 📋 简介
-
-本脚本用于广东科学技术职业学院（珠海校区/广州校区）的锐捷 ePortal 网页认证自动化。
-
----
-
-## 🏢 校园网运营商信息
-
-| 宿舍楼 | 运营商 |
-|--------|--------|
-| 9栋 - 22栋 | 联通 📶 |
-| 其他楼栋 | 电信 📶 |
-
-> 📌 **注意**: 联通网络用户如遇问题，请提交 [Issue](https://github.com/17388749803/Ruijie-Auto-Login/issues) 反馈
-
----
-
-## 📱 关于多设备检测
-
-校园网会检测多设备同时上网，但解决方法很简单：
-
-### NAT 原理
-
-校园网通过 **MAC 地址** 识别设备。NAT (网络地址转换) 让校园网只识别到**一个 MAC 地址**。
-
-### 解决方案
-
-使用 **OpenWrt** 或其衍生版本（ImmortalWrt、PandoraBox 等）的路由器，默认已启用 NAT。
-
-**操作步骤：**
-1. 路由器 WAN 口连接校园网网口
-2. 电脑/手机连接路由器 WiFi 或网线
-3. 路由器自动完成 NAT 转换
-
----
-
-## ✨ 功能特点
-
-| 功能 | 说明 |
-|------|------|
-| 📊 实时日志 | 每一步都有详细状态提示 |
-| 🌐 多环境适配 | 自动检测多种网络环境 |
-| 🎨 彩色输出 | 终端界面清晰直观 |
-| 🔄 自动重试 | 智能检测网络状态 |
-| ❌ 错误提示 | 详细中文错误信息 |
-| ⚡ 一键配置 | setup.sh 互动式安装 |
-| 🛡️ 安全存储 | 密码不再写入 crontab |
-| 🔄 后台守护 | 断线自动重连 |
-| 📦 systemd | Linux 原生服务管理 |
-| 🧪 CI/CD | GitHub Actions 自动检查 |
-
----
-
-## 🚀 快速开始
-
-### 一键配置（推荐 ✅）
-
-```bash
-# 下载配置脚本
-wget -O setup.sh https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/setup.sh
-
-# 运行配置（需要 root 权限）
-chmod +x setup.sh
-sudo sh setup.sh
-```
-
-支持普通 Linux 和 **OpenWrt 路由器**（自动检测）。
-
-配置过程：
-1. ✅ 自动检测系统环境
-2. ✅ 自动下载认证脚本
-3. ✅ **互动式中文界面**，输入账号密码
-4. ✅ 自动测试认证
-5. ✅ 自动配置定时任务
-6. ✅ OpenWrt 自动配置开机自启
-
----
-
-## 📖 手动安装
-
-### 方式1：克隆仓库 (推荐)
-
-```bash
-git clone https://github.com/17388749803/Ruijie-Auto-Login.git
-cd Ruijie-Auto-Login
-chmod +x ruijie.sh lib/*.sh
-```
-
-### 方式2：直接下载
-
-```bash
-wget https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/ruijie.sh
-chmod +x ruijie.sh
-```
-
----
-
-## 💻 使用方法
-
-### 统一入口 (推荐)
-
-```bash
-# 学生登录
-./ruijie.sh --student -u 你的学号 -p 你的密码
-
-# 教师登录
-./ruijie.sh --teacher -u 你的工号 -p 你的密码
-
-# 兼容旧方式 (自动识别学生/教师)
-./ruijie_student.sh 你的学号 你的密码
-./ruijie_teacher.sh 你的工号 你的密码
-
-# 交互式配置 (存储到安全配置文件)
-./ruijie.sh --setup
-```
-
-### 后台守护进程
-
-```bash
-# 启动守护进程 (后台运行，断线自动重连)
-./ruijie.sh --daemon
-
-# 查看守护进程状态
-./ruijie.sh --status
-
-# 停止守护进程
-./ruijie.sh --stop
-```
-
-### systemd 服务
-
-```bash
-# 安装服务
-sudo cp systemd/ruijie.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable ruijie
-
-# 启动/停止
-sudo systemctl start ruijie
-sudo systemctl stop ruijie
-sudo systemctl status ruijie
-
-# 查看日志
-journalctl -u ruijie -f
-```
-
-### 命令行参数
-
-```
---student            使用学生账号模式 (默认)
---teacher            使用教师账号模式
--u, --username 用户名  指定用户名
--p, --password 密码   指定密码
--d, --daemon          以后台守护进程模式运行
---stop               停止守护进程
---status             查看守护进程状态
---setup              交互式配置账号信息
--h, --help           显示帮助信息
-```
-
----
-
-## 🔒 安全说明
-
-### 凭据存储
-
-密码不再存储在 crontab 中（之前版本的明文安全隐患），改用安全配置文件：
-
-```
-~/.config/ruijie/ruijie.conf   (权限 600)
-```
-
-配置文件格式：
-```bash
-# Ruijie Auto-Login Configuration
-USERNAME=你的学号
-PASSWORD=你的密码
-ACCOUNT_TYPE=student
-DAEMON_INTERVAL=300
-```
-
-### 查看/修改配置
-
-```bash
-# 查看当前配置
-cat ~/.config/ruijie/ruijie.conf
-
-# 修改配置 (重新运行安装脚本)
-sudo sh setup.sh
-
-# 手动编辑
-vim ~/.config/ruijie/ruijie.conf
-chmod 600 ~/.config/ruijie/ruijie.conf
-```
-
----
-
-## 🗑️ 卸载
-
-```bash
-# 下载卸载脚本
-wget -O uninstall.sh https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/uninstall.sh
-
-# 运行卸载（需要 root 权限）
-chmod +x uninstall.sh
-sudo sh uninstall.sh
-```
-
-卸载内容：守护进程、systemd 服务、脚本文件、配置文件、日志文件。
-
----
-
-## 📝 输出示例
-
-```
-==========================================
-  锐捷网络认证助手 v3.0
-  广东科学技术职业学院专用
-==========================================
-
-[STEP] 检测网络连接状态...
-[WARN] 未检测到网络连接，开始认证流程...
-```
-
----
-
-## 📁 项目结构
-
-```
-Ruijie-Auto-Login/
-├── ruijie.sh              # 统一入口脚本
-├── ruijie_student.sh      # 符号链接 -> ruijie.sh (向后兼容)
-├── ruijie_teacher.sh      # 符号链接 -> ruijie.sh (向后兼容)
-├── setup.sh               # 一键安装配置脚本
-├── uninstall.sh           # 卸载脚本
-├── lib/
-│   ├── common.sh          # 颜色、日志函数、常量
-│   ├── config.sh          # 配置文件读写 (chmod 600)
-│   ├── network.sh         # 网络检测、认证请求
-│   └── daemon.sh          # 守护进程管理
-├── systemd/
-│   └── ruijie.service     # systemd 服务文件
-├── tests/
-│   ├── run_tests.sh       # 测试入口
-│   ├── mock_server.sh     # Mock HTTP 服务器
-│   └── test_data/         # 测试数据
-├── .github/
-│   └── workflows/
-│       └── ci.yml         # GitHub Actions CI
-├── README.md
-└── LICENSE
-```
-
----
-
-## ⏰ 定时任务（自动登录）
-
-使用 **一键配置** 时会自动设置：
-
-| 项目 | 设置 |
-|------|------|
-| 时间 | 每天 5:00 - 7:00 |
-| 间隔 | 每5分钟 |
-| 日志 | `/var/log/ruijie-login.log` |
-| 密码 | 存储在 `~/.config/ruijie/ruijie.conf` (安全) |
-
-### 手动配置
-
-```bash
-# 编辑定时任务
-crontab -e
-
-# 添加任务 (密码自动从配置文件读取)
-*/5 5-7 * * * /usr/local/bin/ruijie-login
-```
-
-> **安全提示**: 新版本不再把密码写入 crontab，密码通过安全配置文件 (chmod 600) 自动读取。
-
----
-
-## ❓ 常见问题
-
-### Q: 提示"需要输入验证码"？
-> 当前脚本不支持验证码识别，请在网页端手动认证后再使用脚本。
-
-### Q: 认证失败？
-> 1. 检查用户名和密码是否正确
-> 2. 检查网络是否正常
-> 3. 尝试更换检测地址
-
-### Q: 路由器上运行失败？
-> 确保已安装 curl：`opkg install curl`
-
-### Q: 联通网络不能用？
-> 请提交 [Issue](https://github.com/17388749803/Ruijie-Auto-Login/issues) 反馈
-
----
-
-## 🔧 网络维护说明
-
-| 项目 | 负责范围 |
-|------|----------|
-| 🏢 学校 | 墙壁网口 |
-| 👤 用户 | 路由器及之后 |
-
----
-
-## 📜 更新日志
-
-### v2.1 (2026-03)
-- `setup.sh` 支持 OpenWrt 路由器（自动检测，安装到 `/etc/ruijie/`）
-- OpenWrt 下自动配置 `/etc/rc.local` 开机同步脚本
-- 修复 `setup.sh` 只复制 `ruijie.sh` 而忽略 `lib/` 目录的问题
-- 定时任务在 OpenWrt 下输出日志到 `/var/log/ruijie-login.log`
-- 跳过 systemd 服务安装（OpenWrt 不使用 systemd）
+## 更新日志
+
+### v3.1 (2026-04)
+- 新增 `--logout` 下线功能
+- 新增 `--status` / `--info` 增强状态显示
+- 守护进程升级为状态机：在线检测间隔 600s，离线指数退避 30→60→120→300s
+- 新增守护进程锁机制，防止多实例启动
+- 新增扩展单元测试
+- 修复多个 bug（详见 CHANGELOG.md）
 
 ### v3.0 (2026-03)
-- 统一入口脚本 `ruijie.sh`（通过 `--student` / `--teacher` 区分）
-- `ruijie_student.sh` / `ruijie_teacher.sh` 改为符号链接（向后兼容）
-- 安全改进：密码存储在配置文件 (chmod 600)，不再写入 crontab
-- 后台守护进程模式 (`-d/--daemon`)
+- 统一入口脚本
+- 密码安全存储（配置文件 chmod 600）
+- 后台守护进程模式
 - systemd 服务支持
-- GitHub Actions CI (shellcheck + 测试)
-- 模块化代码结构 (`lib/` 目录)
-
-### v2.1 (2025-03)
-- 新增一键配置脚本 (setup.sh)
-- 互动式中文安装界面
-- 自动配置定时任务
-- README 优化排版
-
-### v2.0 (2025-03)
-- 实时日志输出
-- 多环境适配
-- 彩色终端输出
-- 错误处理优化
-
-### v1.x
-- 原始版本
-
----
-
-## 📄 许可证
-
-[GPL-3.0](LICENSE)
-
----
-
-## 🤝 致谢
-
-- 原作者: [error7904](https://github.com/error7904)
-- 参考: [RuijiePortalLoginShellScript](https://github.com/1203746884/RuijiePortalLoginShellScript)
 
 ---
 

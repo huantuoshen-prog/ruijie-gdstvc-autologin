@@ -42,7 +42,7 @@ jobs:
           ln -s ruijie.sh ruijie_student.sh
           ln -s ruijie.sh ruijie_teacher.sh
 
-      - name: Unit tests
+      - name: Unit tests (含扩展单元测试)
         run: bash tests/run_tests.sh unit
 
       - name: Integration tests

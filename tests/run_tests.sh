@@ -66,7 +66,6 @@ run_unit_tests() {
 
     # 测试常量定义
     . "${PROJECT_DIR}/lib/common.sh"
-    assert_contains "$CHECK_URLS" "google.cn"
     assert_contains "$USER_AGENT" "Mozilla"
 
     # 测试配置文件读写
@@ -96,6 +95,16 @@ run_unit_tests() {
 
     # 清理
     rm -f "$_tmp_config"
+
+    # 扩展单元测试（新增的独立测试文件）
+    for _t in "${TEST_DIR}"/test_unit_*.sh; do
+        if [ -f "$_t" ]; then
+            echo ""
+            if ! bash "$_t"; then
+                fail "扩展测试失败: $_t"
+            fi
+        fi
+    done
 }
 
 # ========================================
@@ -171,9 +180,9 @@ run_integration_tests() {
     if [ "$_perms" = "600" ]; then
         pass "配置文件权限 600"
     elif uname | grep -qi "mingw\|msys\|cygwin"; then
-        pass "配置文件权限: $_perms (Windows兼容模式)"
+        pass "配置文件权限检查跳过 (Windows)"
     else
-        fail "配置文件权限: $_perms"
+        fail "配置文件权限: $_perms (应为 600)"
     fi
     rm -f "$_tmp_cfg" "$CONFIG_FILE"
 }

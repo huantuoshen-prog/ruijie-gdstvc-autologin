@@ -4,7 +4,8 @@
 # 广东科学技术职业学院专用
 # ========================================
 
-set -e
+# 注意: 不使用 set -e，因为 check_network() 等函数正常返回1（离线状态）
+# 在需要严格检查的关键段落自行用 || exit 处理
 
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
@@ -65,6 +66,10 @@ parse_args() {
                 DAEMON_MODE=true
                 shift
                 ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
             --daemon-loop)
                 # 内部使用：守护进程循环模式
                 DAEMON_LOOP_MODE=true
@@ -74,8 +79,12 @@ parse_args() {
                 ACTION="stop"
                 shift
                 ;;
-            --status)
+            --status|--info)
                 ACTION="status"
+                shift
+                ;;
+            --logout)
+                ACTION="logout"
                 shift
                 ;;
             --setup)
@@ -84,6 +93,10 @@ parse_args() {
                 ;;
             -h|--help|help)
                 show_help
+                exit 0
+                ;;
+            -v|--version)
+                echo "Ruijie-Auto-Login v${RUIJIE_VERSION:-3.1} (${RUIJIE_BUILD_DATE:-2026-04-07})"
                 exit 0
                 ;;
             *)
@@ -96,11 +109,12 @@ parse_args() {
                         if [ -z "$USERNAME" ]; then
                             USERNAME="$1"
                             PASSWORD="${2:-}"
-                            shift
-                            case "$1" in
-                                --*) ;;
-                                *) [ -n "$1" ] && shift ;;
-                            esac
+                            # 只有第二个参数存在且也不是选项时才额外跳过一个
+                            if [ -n "$2" ] && [ "${2#--}" = "$2" ]; then
+                                shift 2
+                            else
+                                shift
+                            fi
                         else
                             shift
                         fi
@@ -120,8 +134,29 @@ main() {
             exit 0
             ;;
         status)
-            daemon_status
+            show_status
             exit 0
+            ;;
+        logout)
+            if [ -z "$USERNAME" ] && is_configured; then
+                load_config
+            fi
+            if [ -z "$USERNAME" ]; then
+                log_error "下线需要提供用户名"
+                echo "用法: $0 --logout -u 用户名"
+                exit 1
+            fi
+            echo ""
+            echo "即将断开校园网认证（下线）"
+            echo "所有通过此路由器上网的设备将暂时无法上网，直到重新认证"
+            echo ""
+            read -p "确认下线？(y/N): " confirm
+            if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+                echo "已取消"
+                exit 0
+            fi
+            do_logout "$USERNAME"
+            exit $?
             ;;
         setup)
             interactive_config
@@ -144,7 +179,7 @@ main() {
     # 打印banner
     echo ""
     log_info "=========================================="
-    log_info "  锐捷网络认证助手 v3.0"
+    log_info "  锐捷网络认证助手 v${RUIJIE_VERSION:-3.1}"
     log_info "  广东科学技术职业学院专用"
     log_info "=========================================="
     echo ""

@@ -28,9 +28,15 @@ get_service_type() {
 }
 
 # 检查网络是否已连接 (HTTP 204 = 已认证)
+# 显式区分: 204=在线, 000=超时/不可达, 其他=异常
 check_network() {
-    _code=$(curl_with_proxy -s -I -m 10 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>/dev/null)
-    [ "$_code" = "204" ]
+    _code=$(curl_with_proxy -s -I -m 10 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>&1)
+    case "$_code" in
+        204) return 0 ;;
+        000) log_warning "网络不可达（连接超时或无网络）" ;;
+        *)   log_warning "网络检测意外响应码: $_code" ;;
+    esac
+    return 1
 }
 
 # 执行完整登录流程 (对齐工作脚本逻辑)
@@ -38,6 +44,10 @@ do_login() {
     _username="$1"
     _password="$2"
     _account_type="${3:-student}"
+
+    # 函数入口立即清理上次的 EXTRA_NO_PROXY，RETURN trap 确保任何退出路径都清理
+    unset EXTRA_NO_PROXY 2>/dev/null
+    trap 'unset EXTRA_NO_PROXY 2>/dev/null' RETURN
 
     # 检查是否已连接
     log_step "检查网络连接状态..."
@@ -59,6 +69,12 @@ do_login() {
 
     log_success "获取成功: $_login_page_url"
 
+    # verbose 模式输出调试信息
+    if [ "$VERBOSE" = "true" ]; then
+        echo ""
+        echo "[VERBOSE] portal URL: $_login_page_url"
+    fi
+
     # 动态提取 portal 域名，追加到当次 no_proxy（防御性措施）
     _portal_host="$(echo "$_login_page_url" | sed -E 's|^https?://([^/:]+).*$|\1|')"
     if [ -n "$_portal_host" ] && ! echo "$(get_no_proxy_list)" | grep -q "$_portal_host"; then
@@ -73,6 +89,11 @@ do_login() {
     fi
 
     log_info "认证URL: $_login_url"
+
+    if [ "$VERBOSE" = "true" ]; then
+        echo "[VERBOSE] queryString: $_queryString"
+        echo "[VERBOSE] service: $_service"
+    fi
 
     # 从 portal URL 动态提取参数，构建 queryString
     _wlanuserip=$(echo "$_login_page_url" | grep -oE "wlanuserip=[^&]+" | cut -d= -f2-)
@@ -100,9 +121,6 @@ do_login() {
         -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
         "${_login_url}" 2>&1)
 
-    # 清理当次动态追加的 no_proxy
-    unset EXTRA_NO_PROXY
-
     # 解析认证结果 (对齐工作脚本: 检查 JSON result 字段)
     echo ""
     log_step "解析认证服务器响应..."
@@ -121,6 +139,9 @@ do_login() {
     else
         # 非JSON响应
         log_info "服务器响应: $authResult"
+        if [ "$VERBOSE" = "true" ]; then
+            echo "[VERBOSE] 原始响应: $authResult"
+        fi
     fi
 
     echo ""
@@ -142,5 +163,57 @@ do_login() {
         log_warning "请检查用户名和密码是否正确"
         echo ""
         return 1
+    fi
+}
+
+# 执行下线操作
+# 用法: do_logout [username]
+# 返回: 0=成功/已离线, 1=失败(网络仍在线)
+do_logout() {
+    _username="${1:-${USERNAME:-}}"
+
+    if [ -z "$_username" ]; then
+        log_error "下线需要提供用户名"
+        return 1
+    fi
+
+    # 函数入口清理 EXTRA_NO_PROXY
+    unset EXTRA_NO_PROXY 2>/dev/null
+    trap 'unset EXTRA_NO_PROXY 2>/dev/null' RETURN
+
+    log_step "正在发送下线请求..."
+
+    # 获取 portal URL 以构建 logout 地址
+    _login_page_url=$(curl_with_proxy -s "http://www.google.cn/generate_204" 2>&1 | awk -F \' '{print $2}')
+
+    if [ -n "$_login_page_url" ]; then
+        _logout_url="$(build_login_url "$_login_page_url" | sed 's/method=login/method=logout/')"
+    else
+        # fallback: 尝试直接构造
+        _logout_url="http://172.16.16.16/eportal/InterFace.do?method=logout"
+    fi
+
+    log_info "下线URL: $_logout_url"
+
+    _result=$(curl_with_proxy -s -A "$USER_AGENT" \
+        -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
+        -d "userId=${_username}" \
+        -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
+        "${_logout_url}" 2>&1)
+
+    # 解析响应：成功时 result=true 或包含 success
+    if echo "$_result" | grep -qiE '"result"[[:space:]]*:[[:space:]]*true|result.*:.*success'; then
+        log_success "下线成功"
+        return 0
+    fi
+
+    # 非JSON或失败，验证是否真的离线了
+    if check_network; then
+        log_warning "下线请求可能失败（网络仍在线）"
+        log_info "服务器响应: ${_result:-无响应}"
+        return 1
+    else
+        log_success "已离线"
+        return 0
     fi
 }

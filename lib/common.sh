@@ -4,6 +4,20 @@
 # 颜色、日志函数、常量定义
 # ========================================
 
+# 版本信息
+RUIJIE_VERSION="3.1"
+RUIJIE_BUILD_DATE="2026-04-07"
+
+# 退出码常量
+EXIT_NETWORK_UNREACHABLE=10
+EXIT_AUTH_FAILED=11
+EXIT_CONFIG_MISSING=12
+EXIT_DAEMON_ALREADY_RUNNING=13
+EXIT_PERMISSION_DENIED=14
+
+# 调试模式（可通过 -v/--verbose 开启）
+VERBOSE=false
+
 # 颜色定义
 export COLOR_RED='\033[0;31m'
 export COLOR_GREEN='\033[0;32m'
@@ -94,9 +108,12 @@ show_help() {
   --proxy URL          设置 HTTP 代理地址（如 http://127.0.0.1:7890）
   -d, --daemon          以后台守护进程模式运行
   --stop               停止守护进程
-  --status             查看守护进程状态
-  --setup              交互式配置账号信息
-  -h, --help           显示此帮助信息
+  --status, --info      查看网络与认证状态
+  --logout              下线（断开认证）
+  --setup               交互式配置账号信息
+  -v, --verbose         显示详细调试信息（排查问题时使用）
+  -h, --help           显示帮助信息
+  -v, --version        显示版本号
 
 示例:
   $0 --student -u 2023000001 -p 123456
