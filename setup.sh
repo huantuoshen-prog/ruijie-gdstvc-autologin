@@ -288,17 +288,7 @@ elif [ -f "/etc/crontabs/$(whoami)" ]; then
     CRON_CMD="/bin/sh /etc/crontabs/$(whoami)"
 fi
 
-if [ -n "$CRON_CMD" ]; then
-    mkdir -p /var/log
-
-    # 安全: 不在 crontab 中存储密码
-    if is_openwrt; then
-        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh >> /var/log/ruijie-login.log 2>&1"
-    else
-        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh"
-    fi
-
-# 安装 crontab 任务的原子操作函数
+# 安装 crontab 任务的原子操作函数（定义在 if 外部，避免 ShellCheck 解析嵌套问题）
 # 用法: install_cron_task "cron_entry_string"
 install_cron_task() {
     _task="$1"
@@ -346,7 +336,16 @@ install_cron_task() {
     fi
 }
 
-if [ -n "$CRON_TASK" ]; then
+if [ -n "$CRON_CMD" ]; then
+    mkdir -p /var/log
+
+    # 安全: 不在 crontab 中存储密码
+    if is_openwrt; then
+        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh >> /var/log/ruijie-login.log 2>&1"
+    else
+        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh"
+    fi
+
     install_cron_task "$CRON_TASK" || echo_warning "定时任务配置未成功，可稍后手动添加"
 fi
 
