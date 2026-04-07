@@ -1,0 +1,14 @@
+{
+  "installed": true,
+  "online": true,
+  "username": "1720240564",
+  "operator": "DianXin",
+  "account_type": "student",
+  "daemon_running": true,
+  "daemon_pid": 1234,
+  "daemon_uptime": "4h 23m",
+  "daemon_state": "ONLINE",
+  "last_auth": "2026-04-07 14:30:05",
+  "version": "3.1",
+  "message": ""
+}
