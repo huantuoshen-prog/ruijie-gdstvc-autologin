@@ -90,23 +90,43 @@ do_login() {
 
     log_info "认证URL: $_login_url"
 
-    if [ "$VERBOSE" = "true" ]; then
-        echo "[VERBOSE] queryString: $_queryString"
-        echo "[VERBOSE] service: $_service"
-    fi
-
     # 从 portal URL 动态提取参数，构建 queryString
     _wlanuserip=$(echo "$_login_page_url" | grep -oE "wlanuserip=[^&]+" | cut -d= -f2-)
     _wlanacname=$(echo "$_login_page_url" | grep -oE "wlanacname=[^&]+" | cut -d= -f2-)
     _nasip=$(echo "$_login_page_url" | grep -oE "nasip=[^&]+" | cut -d= -f2-)
     _mac=$(echo "$_login_page_url" | grep -oE "mac=[^&]+" | cut -d= -f2-)
     _nasid=$(echo "$_login_page_url" | grep -oE "nasid=[^&]+" | cut -d= -f2-)
+    _vid=$(echo "$_login_page_url" | grep -oE "vid=[^&]+" | cut -d= -f2-)
+    _url=$(echo "$_login_page_url" | grep -oE "url=[^&]+" | cut -d= -f2-)
 
-    _queryString="wlanuserip=${_wlanuserip}&wlanacname=${_wlanacname}&ssid=&nasip=${_nasip}&snmpagentip=&mac=${_mac}&t=wireless-v2&url=&apmac=&nasid=${_nasid}&vid=&port=&nasportid="
+    # 动态提取失败时，用原脚本硬编码值兜底（广科院环境经验证）
+    _fallback_qs="wlanuserip=94ca20c0fb0e777ea4972aaa297a8f3e&wlanacname=643d07a46528c937f09836d589740409&ssid=&nasip=cc5b64e516a1fa61d915e184b913e171&snmpagentip=&mac=e9610ea931d21016b0af5fed148bfe73&t=wireless-v2&url=418b8bb474ba4db13cc1f6dc4a2e7e2b147e5d21f7c9202b&apmac=&nasid=643d07a46528c937f09836d589740409&vid=e7e9ec1de0977a03&port=2dbe874bc250c5f9&nasportid=489ecc80e9f86aea0ba5dc4a08edd8a223dbed083ee5e03fe78d14a5ae3564de"
+
+    # 统计缺失的关键参数数量，超过 3 个则切换到硬编码兜底
+    _missing=0
+    [ -z "$_wlanuserip" ] && _missing=$((_missing + 1))
+    [ -z "$_wlanacname" ] && _missing=$((_missing + 1))
+    [ -z "$_nasip" ]      && _missing=$((_missing + 1))
+    [ -z "$_mac" ]        && _missing=$((_missing + 1))
+    [ -z "$_nasid" ]      && _missing=$((_missing + 1))
+    [ -z "$_vid" ]        && _missing=$((_missing + 1))   # vid 缺失率高，服务器可能校验
+
+    if [ "$_missing" -ge 3 ]; then
+        _queryString="$_fallback_qs"
+        [ "$VERBOSE" = "true" ] && echo "[VERBOSE] 关键参数缺失($_missing个)，切换到硬编码兜底 queryString"
+    else
+        # 动态参数可用，vid/url 用提取值（空则留空）
+        _queryString="wlanuserip=${_wlanuserip}&wlanacname=${_wlanacname}&ssid=&nasip=${_nasip}&snmpagentip=&mac=${_mac}&t=wireless-v2&url=${_url}&apmac=&nasid=${_nasid}&vid=${_vid}&port=&nasportid="
+    fi
     _queryString="${_queryString//&/%2526}"
     _queryString="${_queryString//=/%253D}"
 
     _service="$(get_service_type "$_account_type")"
+
+    if [ "$VERBOSE" = "true" ]; then
+        echo "[VERBOSE] queryString: $_queryString"
+        echo "[VERBOSE] service: $_service"
+    fi
 
     # 发送认证请求 (对齐工作脚本的 curl 参数)
     log_step "向认证服务器发送请求..."
