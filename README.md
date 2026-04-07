@@ -1,4 +1,4 @@
-# Ruijie-Auto-Login 🔐
+# ruijie-gdstvc-autologin 🔐
 
 > 广东科学技术职业学院（珠海校区/广州校区）锐捷 Web 认证自动登录工具 v3.1
 
@@ -112,7 +112,7 @@
 复制以下命令，粘贴到路由器终端，按回车：
 
 ```bash
-wget -O setup.sh https://raw.githubusercontent.com/17388749803/Ruijie-Auto-Login/main/setup.sh
+wget -O setup.sh https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdstvc-autologin/main/setup.sh
 ```
 
 **这条命令是什么意思？**
@@ -238,7 +238,7 @@ tail -f /var/log/ruijie-daemon.log
 
 ### 联通网络用户不能用？
 
-请到 [GitHub Issues](https://github.com/17388749803/Ruijie-Auto-Login/issues) 反馈，并说明是哪个宿舍楼。
+请到 [GitHub Issues](https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/issues) 反馈，并说明是哪个宿舍楼。
 
 ---
 
@@ -369,5 +369,5 @@ Ruijie-Auto-Login/
 
 ## 📧 联系
 
-- GitHub: https://github.com/17388749803/Ruijie-Auto-Login
-- 问题反馈: [提交 Issue](https://github.com/17388749803/Ruijie-Auto-Login/issues)
+- GitHub: https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin
+- 问题反馈: [提交 Issue](https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/issues)
