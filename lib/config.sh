@@ -27,6 +27,7 @@ _cfg_load() {
             USERNAME)      USERNAME="$value" ;;
             PASSWORD)      PASSWORD="$value" ;;
             ACCOUNT_TYPE)  ACCOUNT_TYPE="$value" ;;
+            OPERATOR)      OPERATOR="$value" ;;
             DAEMON_INTERVAL)
                 case "$value" in
                     ''|*[!0-9]*) DAEMON_INTERVAL=300 ;;
@@ -54,6 +55,7 @@ save_config() {
 USERNAME=$_username
 PASSWORD=$_password
 ACCOUNT_TYPE=$_account_type
+OPERATOR=${OPERATOR:-DianXin}
 DAEMON_INTERVAL=${DAEMON_INTERVAL:-300}
 
 # --- Proxy Settings ---

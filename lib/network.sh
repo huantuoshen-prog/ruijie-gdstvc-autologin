@@ -19,12 +19,19 @@ build_login_url() {
 }
 
 # 获取服务类型
+# 用法: get_service_type [account_type] [operator]
+# operator 优先，account_type 次之，默认 DianXin
 get_service_type() {
     _account_type="${1:-student}"
-    case "$_account_type" in
-        teacher) echo "default" ;;
-        *) echo "DianXin" ;;
-    esac
+    _operator="${2:-${OPERATOR:-DianXin}}"
+    # 优先用显式传入的 operator（配置中可指定联通），否则按账号类型推断
+    if [ -n "$_operator" ] && [ "$_operator" != "DianXin" ]; then
+        echo "$_operator"
+    elif [ "$_account_type" = "teacher" ]; then
+        echo "default"
+    else
+        echo "DianXin"
+    fi
 }
 
 # 检查网络是否已连接 (HTTP 204 = 已认证)
@@ -44,6 +51,7 @@ do_login() {
     _username="$1"
     _password="$2"
     _account_type="${3:-student}"
+    _operator="${4:-${OPERATOR:-DianXin}}"
 
     # 函数入口立即清理上次的 EXTRA_NO_PROXY，RETURN trap 确保任何退出路径都清理
     unset EXTRA_NO_PROXY 2>/dev/null
@@ -121,7 +129,7 @@ do_login() {
     _queryString="${_queryString//&/%2526}"
     _queryString="${_queryString//=/%253D}"
 
-    _service="$(get_service_type "$_account_type")"
+    _service="$(get_service_type "$_account_type" "$_operator")"
 
     if [ "$VERBOSE" = "true" ]; then
         echo "[VERBOSE] queryString: $_queryString"
