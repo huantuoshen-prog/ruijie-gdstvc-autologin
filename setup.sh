@@ -175,6 +175,18 @@ case "$account_choice" in
     *) ACCOUNT_TYPE="student" ;;
 esac
 
+# 选择网络运营商（影响 service 参数）
+echo ""
+echo "请选择你宿舍的网络运营商:"
+echo "  [1] 电信 (9栋以外的大部分楼栋，默认)"
+echo "  [2] 联通 (9栋 - 22栋)"
+echo -n "请选择 [1/2]: "
+read operator_choice
+case "$operator_choice" in
+    2) OPERATOR="LianTong" ;;
+    *) OPERATOR="DianXin" ;;
+esac
+
 # 输入账号
 echo -n "请输入用户名 (学号/工号): "
 read username
@@ -229,6 +241,7 @@ cat > "$CONFIG_FILE" << EOF
 USERNAME=$username
 PASSWORD=$password
 ACCOUNT_TYPE=$ACCOUNT_TYPE
+OPERATOR=$OPERATOR
 DAEMON_INTERVAL=300
 
 # --- Proxy Settings ---
@@ -251,7 +264,7 @@ TEST_SCRIPT="$INSTALL_TARGET/ruijie.sh"
 if is_openwrt && [ -f "$OPENWRT_ACTIVE_DIR/ruijie.sh" ]; then
     TEST_SCRIPT="$OPENWRT_ACTIVE_DIR/ruijie.sh"
 fi
-test_result=$("$TEST_SCRIPT" --${ACCOUNT_TYPE} -u "$username" -p "$password" 2>&1)
+test_result=$("$TEST_SCRIPT" --${ACCOUNT_TYPE} -u "$username" -p "$password" --operator "$OPERATOR" 2>&1)
 
 if echo "$test_result" | grep -qi "认证成功\|网络连接正常\|already\|无需认证"; then
     echo_success "认证测试通过！"

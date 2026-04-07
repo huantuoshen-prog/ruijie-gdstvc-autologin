@@ -62,6 +62,10 @@ parse_args() {
                 PROXY_URL="$2"
                 shift 2
                 ;;
+            --operator)
+                OPERATOR="$2"
+                shift 2
+                ;;
             -d|--daemon)
                 DAEMON_MODE=true
                 shift
@@ -206,8 +210,8 @@ main() {
         log_info "使用教师账号模式"
     fi
 
-    # 执行登录
-    do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE"
+    # 执行登录（OPERATOR 由 get_service_type 内部使用，默认为 DianXin）
+    do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" "$OPERATOR"
 }
 
 # 启动

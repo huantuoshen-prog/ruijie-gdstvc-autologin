@@ -105,6 +105,7 @@ show_help() {
   --teacher            使用教师账号模式
   -u, --username 用户名  指定用户名
   -p, --password 密码   指定密码
+  --operator 运营商     指定运营商: DianXin(电信) 或 LianTong(联通，默认电信)
   --proxy URL          设置 HTTP 代理地址（如 http://127.0.0.1:7890）
   -d, --daemon          以后台守护进程模式运行
   --stop               停止守护进程
