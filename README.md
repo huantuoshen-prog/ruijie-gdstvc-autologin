@@ -443,6 +443,16 @@ tail -f /var/log/ruijie-daemon.log
 
 ---
 
+## 🌐 Web 管理面板（可选）
+
+如果你的路由器是 OpenWrt / iStoreOS，可以安装 Web 管理界面，在浏览器里管理脚本，无需敲命令。
+
+**独立仓库：** https://github.com/huantuoshen-prog/ruijie-web-panel
+
+功能：状态监控 · 账号管理 · 守护进程控制 · 电信/联通切换 · 日志查看 · 代理设置
+
+---
+
 ## 🏢 校园网运营商信息
 
 | 宿舍楼 | 运营商 | service 参数 |
