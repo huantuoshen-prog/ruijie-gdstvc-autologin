@@ -78,15 +78,92 @@ echo_success "权限检查通过"
 # 检查必要工具
 # ========================================
 echo_step "检查必要工具..."
+
+# ---- nohup 后台运行工具（守护进程必需）----
+check_nohup() {
+    if command -v nohup >/dev/null 2>&1; then
+        echo_success "nohup 已就绪"
+    elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qw "nohup"; then
+        echo_success "busybox nohup 已就绪"
+    elif command -v setsid >/dev/null 2>&1; then
+        echo_success "setsid 已就绪（可替代 nohup）"
+    else
+        echo_warning "未检测到后台运行工具 (nohup/setsid)"
+        echo_info "正在自动修复 opkg 源并安装..."
+        fix_opkg_feeds && install_via_opkg "coreutils-nohup" && echo_success "coreutils-nohup 安装成功"
+    fi
+}
+
+# ---- opkg 源修复 ----
+# 自动检测 OpenWrt 版本，修复失效的 feeds
+fix_opkg_feeds() {
+    if ! command -v opkg >/dev/null 2>&1; then
+        echo_warning "opkg 不可用，跳过自动修复"
+        return 1
+    fi
+
+    # 读取当前固件版本
+    _release=$(grep "DISTRIB_RELEASE=" /etc/openwrt_release 2>/dev/null | cut -d"'" -f2)
+    _arch=$(grep "DISTRIB_TARGET=" /etc/openwrt_release 2>/dev/null | cut -d"'" -f2 | tr '/' '_')
+    [ -z "$_release" ] && _release="19.07" && echo_warning "无法识别固件版本，尝试 19.07"
+
+    echo_info "固件版本: $_release | 架构: $_arch"
+
+    # 修复 feeds 配置（覆盖失效的 snapshot 源）
+    _feeds_conf="/etc/opkg/customfeeds.conf"
+    _arch_path="packages/aarch64_cortex-a53"
+
+    # 构造可用源列表（按优先级）
+    _feeds="
+src/gz openwrt_core     https://downloads.openwrt.org/releases/${_release}/targets/ipq60xx/generic
+src/gz openwrt_base    https://downloads.openwrt.org/releases/${_release}/${_arch_path}/base
+src/gz openwrt_luci    https://downloads.openwrt.org/releases/${_release}/${_arch_path}/luci
+src/gz openwrt_packages https://downloads.openwrt.org/releases/${_release}/${_arch_path}/packages
+src/gz openwrt_routing https://downloads.openwrt.org/releases/${_release}/${_arch_path}/routing
+src/gz istore          https://istore.linkease.com/repo/all
+"
+
+    # 备份原配置
+    [ -f "$_feeds_conf" ] && cp "$_feeds_conf" "${_feeds_conf}.bak.$(date +%s)"
+
+    printf '%s' "$_feeds" > "$_feeds_conf"
+    echo_info "已写入 feeds 配置: $_feeds_conf"
+
+    echo_info "正在更新软件包列表..."
+    opkg update >/dev/null 2>&1 && echo_success "opkg 源更新成功" && return 0
+
+    # 全部失败，尝试仅用 iStore
+    echo_warning "官方源全部失效，尝试仅使用 iStore 镜像..."
+    printf 'src/gz istore https://istore.linkease.com/repo/all\n' > "$_feeds_conf"
+    opkg update >/dev/null 2>&1 && echo_success "iStore 源更新成功" && return 0
+
+    echo_error "所有 opkg 源均无法访问，请手动配置 /etc/opkg/customfeeds.conf"
+    return 1
+}
+
+# ---- 通过 opkg 安装包（含离线回退）----
+install_via_opkg() {
+    _pkg="$1"
+    if ! command -v opkg >/dev/null 2>&1; then
+        echo_warning "opkg 不可用，无法安装 $_pkg"
+        return 1
+    fi
+    opkg install "$_pkg" 2>/dev/null && return 0
+
+    echo_warning "在线安装失败，尝试离线安装..."
+    # 尝试从缓存或 /tmp 安装
+    for _ipk in "/tmp/${_pkg}.ipk" "/tmp/deps/${_pkg}.ipk"; do
+        [ -f "$_ipk" ] && opkg install "$_ipk" 2>/dev/null && return 0
+    done
+    echo_error "离线安装也失败，请手动下载 ${_pkg} ipk 包放入 /tmp 后重试"
+    return 1
+}
+
+check_nohup
+
 if ! command -v curl >/dev/null 2>&1; then
     echo_warning "curl 未安装，正在尝试安装..."
-    if command -v apt-get >/dev/null 2>&1; then
-        apt-get update && apt-get install -y curl
-    elif command -v yum >/dev/null 2>&1; then
-        yum install -y curl
-    elif command -v opkg >/dev/null 2>&1; then
-        opkg update && opkg install curl
-    fi
+    install_via_opkg "curl"
 fi
 
 if command -v curl >/dev/null 2>&1; then

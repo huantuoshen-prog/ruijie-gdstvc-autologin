@@ -283,6 +283,19 @@ daemon_loop() {
 }
 
 # 后台启动守护进程
+# 优先使用 nohup (coreutils)，依次回退到 busybox nohup、setsid
+_daemon_get_bg_cmd() {
+    if command -v nohup >/dev/null 2>&1; then
+        echo "nohup"
+    elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qw "nohup"; then
+        echo "busybox nohup"
+    elif command -v setsid >/dev/null 2>&1; then
+        echo "setsid"
+    else
+        echo ""
+    fi
+}
+
 daemon_start() {
     # 尝试获取锁，防止多实例启动
     exec 200>"$_LOCKFILE"
@@ -296,38 +309,65 @@ daemon_start() {
     if daemon_is_running; then
         _pid=$(cat "$PIDFILE")
         log_warning "守护进程已在运行 (PID $_pid)"
-        flock -n 200 && exec 200>&- || true
-        return 1
+        flock -n 200 && exec 200>&- || true; return 1
     fi
 
     # 确保有配置
     if ! is_configured; then
         log_error "未检测到配置，请先运行 '$0 --setup' 进行配置"
+        flock -n 200 && exec 200>&- || true; return 1
+    fi
+
+    # 加载配置
+    load_config
+
+    # 检测后台运行方式
+    _bg_cmd=$(_daemon_get_bg_cmd)
+    if [ -z "$_bg_cmd" ]; then
+        log_error "缺少后台运行工具 (nohup/setsid)"
+        echo ""
+        echo "  推荐安装 coreutils-nohup:"
+        echo "    opkg update && opkg install coreutils-nohup"
+        echo ""
+        echo "  若 opkg 源失效，可手动从备用源下载:"
+        echo "    wget https://downloads.openwrt.org/releases/19.07.10/packages/aarch64_cortex-a53/base/coreutils-nohup_9.1-1_aarch64_cortex-a53.ipk -O /tmp/nohup.ipk"
+        echo "    opkg install /tmp/nohup.ipk"
+        echo ""
+        echo "  或使用 BusyBox 内置 nohup:"
+        echo "    opkg install busybox && busybox --install"
         exec 200>&- || true
         return 1
     fi
-
-    # 加载配置（DAEMON_INTERVAL_ONLINE 由状态机内部常量决定，不依赖旧配置）
-    load_config
 
     # 创建日志目录
     _logdir="$(dirname "$LOGFILE")"
     mkdir -p "$_logdir" 2>/dev/null || log_warning "无法创建日志目录 $LOGFILE，日志可能写入失败"
 
-    # 后台启动（SCRIPT_DIR 在 ruijie.sh 中已设为绝对路径）
-    nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+    # 后台启动
+    case "$_bg_cmd" in
+        "nohup")
+            nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            ;;
+        "busybox nohup")
+            busybox nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            ;;
+        "setsid")
+            setsid "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            ;;
+    esac
     _pid=$!
     echo "$_pid" > "$PIDFILE"
 
     # 确保进程真正启动
     sleep 1
     if kill -0 "$_pid" 2>/dev/null; then
-        log_success "守护进程已启动 (PID $_pid)"
+        log_success "守护进程已启动 (PID $_pid, 后台工具: $_bg_cmd)"
         log_info "日志文件: $LOGFILE"
+        flock -n 200 && exec 200>&- || true
         return 0
     else
         rm -f "$PIDFILE"
-        log_error "守护进程启动失败"
+        log_error "守护进程启动失败（后台工具: $_bg_cmd）"
         exec 200>&- || true
         return 1
     fi
