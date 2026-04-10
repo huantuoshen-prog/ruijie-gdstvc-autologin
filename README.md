@@ -209,24 +209,18 @@ chmod +x /tmp/panel-install.sh && sh /tmp/panel-install.sh
 opkg update && opkg install curl
 ```
 
-**提示"守护进程启动失败"（缺少 nohup）**
+**守护进程启动失败 / opkg 源全部失败**
 
-> setup.sh 安装时会自动修复 opkg 源并安装缺失依赖。如遇此问题，请重新运行安装脚本：
+> 这是因为路由器的 opkg 源指向 `19.07-SNAPSHOT`（快照版），腾讯云镜像站已下线该目录。setup.sh 会**自动修复**，只需重新运行安装脚本：
 
 ```bash
 sh /tmp/setup.sh
 ```
 
-若仍失败，可手动修复：
+若自动修复仍失败，手动一行命令搞定：
 
 ```bash
-# 1. 修复 opkg 源（自动适配固件版本）
-sed -i 's|https://mirrors.cloud.tencent.com/openwrt/releases/19.07-SNAPSHOT|https://downloads.openwrt.org/releases/19.07.10|g' /etc/opkg/*.conf 2>/dev/null
-
-# 2. 安装缺失依赖
-opkg update && opkg install coreutils-nohup
-
-# 3. 重启守护进程
+sed -i 's/19\.07-SNAPSHOT/19.07.10/g' /etc/opkg/distfeeds.conf && opkg update && opkg install coreutils-nohup
 cd /etc/ruijie && ./ruijie.sh --daemon
 ```
 

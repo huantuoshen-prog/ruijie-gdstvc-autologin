@@ -81,63 +81,148 @@ echo_step "检查必要工具..."
 
 # ---- nohup 后台运行工具（守护进程必需）----
 check_nohup() {
-    if command -v nohup >/dev/null 2>&1; then
+    if command -v nohup >/dev/null 2>&1 && nohup echo >/dev/null 2>&1; then
         echo_success "nohup 已就绪"
-    elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qw "nohup"; then
+        return 0
+    elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qw "nohup" \
+         && busybox nohup echo >/dev/null 2>&1; then
         echo_success "busybox nohup 已就绪"
+        return 0
     elif command -v setsid >/dev/null 2>&1; then
         echo_success "setsid 已就绪（可替代 nohup）"
-    else
-        echo_warning "未检测到后台运行工具 (nohup/setsid)"
-        echo_info "正在自动修复 opkg 源并安装..."
-        fix_opkg_feeds && install_via_opkg "coreutils-nohup" && echo_success "coreutils-nohup 安装成功"
+        return 0
     fi
+
+    echo_warning "未检测到后台运行工具 (nohup/setsid)"
+    echo_info "正在修复 opkg 源并安装 coreutils-nohup..."
+
+    if fix_opkg_feeds; then
+        if install_via_opkg "coreutils-nohup"; then
+            echo_success "coreutils-nohup 安装成功"
+            return 0
+        fi
+    fi
+
+    # 全部失败，给出兜底提示
+    echo ""
+    echo_error "无法自动安装 nohup，请在路由器上手动执行以下命令后重新运行本脚本："
+    echo ""
+    echo "  sed -i 's/SNAPSHOT/19.07.10/g' /etc/opkg/distfeeds.conf"
+    echo "  opkg update && opkg install coreutils-nohup"
+    echo ""
+    read -p "按回车退出，配置好 nohup 后重新运行 setup.sh: "
+    exit 1
 }
 
 # ---- opkg 源修复 ----
-# 自动检测 OpenWrt 版本，修复失效的 feeds
+# 核心问题：固件报告的 VERSION 常为 "19.07-SNAPSHOT"，
+# 但 downloads.openwrt.org 上 SNAPSHOT 目录早已删除。
+# 必须探测实际可用版本（如 19.07.10）再替换 feeds。
 fix_opkg_feeds() {
     if ! command -v opkg >/dev/null 2>&1; then
         echo_warning "opkg 不可用，跳过自动修复"
         return 1
     fi
 
-    # 读取当前固件版本
-    _release=$(grep "DISTRIB_RELEASE=" /etc/openwrt_release 2>/dev/null | cut -d"'" -f2)
-    _arch=$(grep "DISTRIB_TARGET=" /etc/openwrt_release 2>/dev/null | cut -d"'" -f2 | tr '/' '_')
-    [ -z "$_release" ] && _release="19.07" && echo_warning "无法识别固件版本，尝试 19.07"
+    # 读取固件版本和架构
+    _release=$(grep "DISTRIB_RELEASE=" /etc/openwrt_release 2>/dev/null | cut -d"'" -f2 | tr -d '[:space:]')
+    _arch=$(grep "DISTRIB_TARGET=" /etc/openwrt_release 2>/dev/null | cut -d"'" -f2)
+    _arch_path="packages/$(echo "$_arch" | tr '/' '_')"
 
-    echo_info "固件版本: $_release | 架构: $_arch"
+    echo_info "检测到固件: $_release | 架构路径: $_arch_path"
 
-    # 修复 feeds 配置（覆盖失效的 snapshot 源）
-    _feeds_conf="/etc/opkg/customfeeds.conf"
-    _arch_path="packages/aarch64_cortex-a53"
+    # SNAPSHOT / RC 版本探测：curl downloads.openwrt.org/releases/ 获取实际最新版本
+    _fallback_ver=""
+    if echo "$_release" | grep -qiE "snapshot|rc"; then
+        echo_info "检测到 SNAPSHOT/RC 固件，探测可用 release 版本..."
+        _fallback_ver=$(curl -s --max-time 8 "https://downloads.openwrt.org/releases/" \
+            | grep -oE '">[0-9]+\.[0-9]+(\.[0-9]+)?/' \
+            | grep -vE 'snapshots|rc' \
+            | tail -1 | tr -d '>/' )
+        if [ -n "$_fallback_ver" ]; then
+            echo_info "发现最新可用版本: $_fallback_ver，将替换失效的 $_release 源"
+        else
+            # 已知的最后一个稳定版
+            _fallback_ver="19.07.10"
+            echo_warning "自动探测失败，使用备用版本: $_fallback_ver"
+        fi
+    else
+        _fallback_ver="$_release"
+    fi
 
-    # 构造可用源列表（按优先级）
-    _feeds="
-src/gz openwrt_core     https://downloads.openwrt.org/releases/${_release}/targets/ipq60xx/generic
-src/gz openwrt_base    https://downloads.openwrt.org/releases/${_release}/${_arch_path}/base
-src/gz openwrt_luci    https://downloads.openwrt.org/releases/${_release}/${_arch_path}/luci
-src/gz openwrt_packages https://downloads.openwrt.org/releases/${_release}/${_arch_path}/packages
-src/gz openwrt_routing https://downloads.openwrt.org/releases/${_release}/${_arch_path}/routing
-src/gz istore          https://istore.linkease.com/repo/all
-"
+    # 探测该版本是否真的可用
+    if ! curl -s --max-time 5 -I "https://downloads.openwrt.org/releases/${_fallback_ver}/${_arch_path}/base/" >/dev/null 2>&1; then
+        echo_warning "版本 $_fallback_ver 官方源不可达，尝试腾讯云镜像..."
+        # 腾讯云镜像（可能保留旧版本）
+        if curl -s --max-time 5 -I "https://mirrors.cloud.tencent.com/openwrt/releases/${_fallback_ver}/${_arch_path}/base/" >/dev/null 2>&1; then
+            _mirror="https://mirrors.cloud.tencent.com/openwrt/releases"
+            echo_info "使用腾讯云镜像: $_mirror"
+        else
+            _mirror="https://downloads.openwrt.org/releases"
+            echo_warning "所有镜像均不可达，继续尝试..."
+        fi
+    else
+        _mirror="https://downloads.openwrt.org/releases"
+    fi
 
-    # 备份原配置
-    [ -f "$_feeds_conf" ] && cp "$_feeds_conf" "${_feeds_conf}.bak.$(date +%s)"
+    # 替换 distfeeds.conf（系统默认 feeds 文件）中的所有失效源
+    _dist_conf="/etc/opkg/distfeeds.conf"
+    _bak="${_dist_conf}.bak.$(date +%s)"
+    if [ -f "$_dist_conf" ]; then
+        cp "$_dist_conf" "$_bak"
+        echo_info "备份原 feeds 配置: $_bak"
+    fi
 
-    printf '%s' "$_feeds" > "$_feeds_conf"
-    echo_info "已写入 feeds 配置: $_feeds_conf"
+    # 生成新的 feeds 配置（保持原有结构：core + base + luci + packages 等）
+    sed -e "s|https://[^/]*\.tencent\.com/openwrt/releases/[^+]*|${_mirror}/${_fallback_ver}|g" \
+        -e "s|https://downloads\.openwrt\.org/releases/${_release}|${_mirror}/${_fallback_ver}|g" \
+        -e "s|${_release}|${_fallback_ver}|g" \
+        -e "s|SNAPSHOT|${_fallback_ver}|g" \
+        "$_dist_conf" 2>/dev/null > "${_dist_conf}.new" || true
+
+    # 如果 sed 替换后内容未变（完全失效的源），直接写入可用源
+    if ! grep -q "$_fallback_ver" "${_dist_conf}.new" 2>/dev/null; then
+        cat > "$_dist_conf" << EOCONF
+src/gz openwrt_core https://${_mirror#https://}/${_fallback_ver}/targets/ipq60xx/generic
+src/gz openwrt_base https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/base
+src/gz openwrt_luci https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/luci
+src/gz openwrt_packages https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/packages
+src/gz openwrt_routing https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/routing
+src/gz openwrt_nas https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/nas
+src/gz openwrt_telephony https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/telephony
+src/gz istore https://istore.linkease.com/repo/all
+EOCONF
+        echo_info "已重写 feeds（源版本完全不可用）"
+    else
+        mv "${_dist_conf}.new" "$_dist_conf"
+        echo_info "已修复 feeds 中的版本号 -> $_fallback_ver"
+    fi
+
+    # 清理 customfeeds.conf 中可能残留的冲突条目（删除重复的 SNAPSHOT 源）
+    _cust_conf="/etc/opkg/customfeeds.conf"
+    if [ -f "$_cust_conf" ]; then
+        grep -v "SNAPSHOT\|19\.07-SNAPSHOT" "$_cust_conf" > "${_cust_conf}.new" 2>/dev/null
+        mv "${_cust_conf}.new" "$_cust_conf" 2>/dev/null || true
+    fi
 
     echo_info "正在更新软件包列表..."
-    opkg update >/dev/null 2>&1 && echo_success "opkg 源更新成功" && return 0
+    _opkg_out=$(opkg update 2>&1)
+    if echo "$_opkg_out" | grep -qi "Updated list"; then
+        echo_success "opkg 源更新成功！"
+        return 0
+    fi
 
-    # 全部失败，尝试仅用 iStore
-    echo_warning "官方源全部失效，尝试仅使用 iStore 镜像..."
-    printf 'src/gz istore https://istore.linkease.com/repo/all\n' > "$_feeds_conf"
-    opkg update >/dev/null 2>&1 && echo_success "iStore 源更新成功" && return 0
+    # 部分成功（部分源失败）的降级处理：尝试只启用有效的 base + packages
+    echo_warning "部分源更新失败，尝试仅使用有效的核心源..."
+    cat > "$_dist_conf" << EOCONF2
+src/gz openwrt_base https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/base
+src/gz openwrt_packages https://${_mirror#https://}/${_fallback_ver}/${_arch_path}/packages
+src/gz istore https://istore.linkease.com/repo/all
+EOCONF2
+    opkg update >/dev/null 2>&1 && echo_success "核心源更新成功" && return 0
 
-    echo_error "所有 opkg 源均无法访问，请手动配置 /etc/opkg/customfeeds.conf"
+    echo_error "所有 opkg 源均无法访问，请检查网络连接或手动配置源"
+    echo_info "手动修复参考：sed -i 's/SNAPSHOT/19.07.10/g' /etc/opkg/distfeeds.conf"
     return 1
 }
 
@@ -148,14 +233,29 @@ install_via_opkg() {
         echo_warning "opkg 不可用，无法安装 $_pkg"
         return 1
     fi
-    opkg install "$_pkg" 2>/dev/null && return 0
 
-    echo_warning "在线安装失败，尝试离线安装..."
-    # 尝试从缓存或 /tmp 安装
-    for _ipk in "/tmp/${_pkg}.ipk" "/tmp/deps/${_pkg}.ipk"; do
+    # 先尝试直接安装
+    if opkg install "$_pkg" 2>&1 | grep -qi "already\|installed\|Successfully"; then
+        echo_success "$_pkg 安装成功"
+        return 0
+    fi
+
+    echo_warning "在线安装 $_pkg 失败，尝试离线安装..."
+    for _ipk in "/tmp/${_pkg}.ipk" "/tmp/deps/${_pkg}.ipk" "/overlay/tmp/${_pkg}.ipk"; do
         [ -f "$_ipk" ] && opkg install "$_ipk" 2>/dev/null && return 0
     done
-    echo_error "离线安装也失败，请手动下载 ${_pkg} ipk 包放入 /tmp 后重试"
+
+    # 打印手动解决步骤
+    echo ""
+    echo_error " $_pkg 安装失败，请手动处理："
+    echo "  方法1 - 手动修复 opkg 源后重试:"
+    echo "    sed -i 's/SNAPSHOT/19.07.10/g' /etc/opkg/distfeeds.conf"
+    echo "    opkg update && opkg install $_pkg"
+    echo ""
+    echo "  方法2 - 直接从备用地址下载:"
+    echo "    wget https://downloads.openwrt.org/releases/19.07.10/packages/aarch64_cortex-a53/base/${_pkg}_*.ipk -O /tmp/${_pkg}.ipk"
+    echo "    opkg install /tmp/${_pkg}.ipk"
+    echo ""
     return 1
 }
 
