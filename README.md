@@ -146,6 +146,30 @@ cd /etc/ruijie
 
 ---
 
+## 卸载与重装
+
+### 卸载脚本
+
+```bash
+sh uninstall.sh          # 普通卸载（保留配置文件和账号）
+sh uninstall.sh --purge  # 彻底清除（包含配置文件、账号信息、日志）
+sh uninstall.sh --force  # 无需确认直接卸载
+```
+
+> 更换版本前建议先执行 `sh uninstall.sh --purge`，确保旧配置不影响新版本。
+
+### 重装
+
+```bash
+# 1. 卸载旧版本
+sh uninstall.sh --purge
+
+# 2. 重新安装
+sh /tmp/setup.sh
+```
+
+---
+
 ## Web 管理面板
 
 如果你的路由器是 OpenWrt / iStoreOS，可以安装 Web 管理界面，在浏览器里管理脚本所有功能，无需敲命令。
@@ -183,6 +207,27 @@ chmod +x /tmp/panel-install.sh && sh /tmp/panel-install.sh
 
 ```bash
 opkg update && opkg install curl
+```
+
+**提示"守护进程启动失败"（缺少 nohup）**
+
+> setup.sh 安装时会自动修复 opkg 源并安装缺失依赖。如遇此问题，请重新运行安装脚本：
+
+```bash
+sh /tmp/setup.sh
+```
+
+若仍失败，可手动修复：
+
+```bash
+# 1. 修复 opkg 源（自动适配固件版本）
+sed -i 's|https://mirrors.cloud.tencent.com/openwrt/releases/19.07-SNAPSHOT|https://downloads.openwrt.org/releases/19.07.10|g' /etc/opkg/*.conf 2>/dev/null
+
+# 2. 安装缺失依赖
+opkg update && opkg install coreutils-nohup
+
+# 3. 重启守护进程
+cd /etc/ruijie && ./ruijie.sh --daemon
 ```
 
 **守护进程没有自动重连**
@@ -229,13 +274,14 @@ ruijie-gdstvc-autologin/
 ├── ruijie.sh              # 统一入口脚本
 ├── ruijie_student.sh      # 符号链接 -> ruijie.sh（学生模式）
 ├── ruijie_teacher.sh      # 符号链接 -> ruijie.sh（教师模式）
-├── setup.sh               # 交互式安装配置脚本
-├── uninstall.sh           # 卸载脚本
+├── setup.sh               # 交互式安装脚本（含 opkg 源自动修复）
+├── uninstall.sh           # 卸载脚本（--purge/--force）
 ├── lib/
 │   ├── common.sh          # 颜色、日志、代理工具函数
 │   ├── config.sh          # 配置文件读写
 │   ├── network.sh         # 网络检测、认证请求
-│   └── daemon.sh          # 守护进程状态机管理
+│   └── daemon.sh          # 守护进程状态机（支持 busybox fallback）
+├── systemd/               # systemd 服务文件（Linux PC 用）
 ├── tests/                 # 单元测试
 └── README.md
 ```
@@ -252,6 +298,9 @@ ruijie-gdstvc-autologin/
 - 新增多实例互斥锁机制
 - 新增单元测试
 - 重构代码，消除大量重复逻辑
+- **兼容性增强**：守护进程自动回退 nohup → busybox nohup → setsid
+- **opkg 源自动修复**：安装时自动检测固件版本，修复失效的 snapshot 源为 release 源
+- **卸载功能完善**：新增 `--purge`（彻底清除配置）、`--force`（无需确认），自动清理 rc.local 和 crontab
 
 ### v3.0 (2026-03)
 
