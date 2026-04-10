@@ -194,12 +194,13 @@ install_scripts() {
     cp "${SETUP_DIR}/ruijie.sh" "$_target/ruijie.sh"
     cp "${SETUP_DIR}/ruijie_student.sh" "$_target/ruijie_student.sh"
     cp "${SETUP_DIR}/ruijie_teacher.sh" "$_target/ruijie_teacher.sh"
+    cp "${SETUP_DIR}/uninstall.sh" "$_target/uninstall.sh"
 
     for lib in "${SETUP_DIR}/lib"/*.sh; do
         [ -f "$lib" ] && cp "$lib" "$_target/lib/"
     done
 
-    chmod +x "$_target/ruijie.sh" "$_target/ruijie_student.sh" "$_target/ruijie_teacher.sh"
+    chmod +x "$_target/ruijie.sh" "$_target/ruijie_student.sh" "$_target/ruijie_teacher.sh" "$_target/uninstall.sh"
     chmod +x "$_target/lib"/*.sh
 }
 
