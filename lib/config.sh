@@ -68,9 +68,9 @@ EOF
     chmod 600 "$CONFIG_FILE"
 }
 
-# 检查是否已配置
+# 检查是否已配置（单次文件遍历）
 is_configured() {
-    [ -f "$CONFIG_FILE" ] && grep -q "^USERNAME=" "$CONFIG_FILE" && grep -q "^PASSWORD=" "$CONFIG_FILE"
+    [ -f "$CONFIG_FILE" ] && grep -qE '^USERNAME=.+|^PASSWORD=.+' "$CONFIG_FILE"
 }
 
 # 获取账号类型 (从配置或默认值)

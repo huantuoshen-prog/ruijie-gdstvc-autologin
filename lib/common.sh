@@ -114,7 +114,7 @@ show_help() {
   --setup               交互式配置账号信息
   -v, --verbose         显示详细调试信息（排查问题时使用）
   -h, --help           显示帮助信息
-  -v, --version        显示版本号
+  -V, --version        显示版本号
 
 示例:
   $0 --student -u 2023000001 -p 123456

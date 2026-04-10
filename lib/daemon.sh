@@ -4,26 +4,6 @@
 # pidfile 管理、信号处理、后台循环
 # ========================================
 
-# 获取脚本所在目录
-_get_script_dir() {
-    if [ -n "$SCRIPT_DIR" ]; then
-        echo "$SCRIPT_DIR"
-        return
-    fi
-    _d="$(dirname "${0}")"
-    if [ "$_d" = "." ]; then
-        _d="$(pwd)"
-    elif echo "$_d" | grep -q "^/"; then
-        # 绝对路径
-        :
-    else
-        # 相对路径，转为绝对路径
-        _pwd="$(pwd)"
-        _d="$_pwd/$_d"
-    fi
-    echo "$_d"
-}
-
 # 锁文件路径（用于防止多实例启动）
 _LOCKFILE="${LOCKFILE:-/var/run/ruijie-daemon.lock}"
 
@@ -35,9 +15,8 @@ _LOCKFILE="${LOCKFILE:-/var/run/ruijie-daemon.lock}"
 get_last_auth_time() {
     if [ -f "$LOGFILE" ]; then
         _last=$(grep -E "认证成功|login success|ONLINE" "$LOGFILE" 2>/dev/null \
-            | tail -1 \
             | grep -oE '^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' \
-            | tail -1 | tr -d '[]' | tr -d ' ')
+            | tail -1 | tr -d '[] ')
         [ -n "$_last" ] && echo "$_last" && return 0
     fi
     return 1
@@ -164,8 +143,7 @@ daemon_stop() {
         fi
 
         rm -f "$PIDFILE"
-        # 释放锁文件
-        exec 200>"$_LOCKFILE" 2>/dev/null && : > "$_LOCKFILE" || true
+        > "$_LOCKFILE" 2>/dev/null || true
         # 清理状态文件
         rm -f "/var/run/ruijie-daemon.state" "/var/run/ruijie-daemon.backoff" 2>/dev/null || true
         log_success "守护进程已停止"
@@ -181,6 +159,7 @@ daemon_stop() {
 # 动态间隔常量
 _DAEMON_INTERVAL_ONLINE="${DAEMON_INTERVAL_ONLINE:-600}"   # 在线检测间隔(秒)
 _DAEMON_INTERVAL_SHORT="${DAEMON_INTERVAL_SHORT:-30}"     # 离线首次重试
+_DAEMON_INTERVAL_LONG="${DAEMON_INTERVAL_LONG:-300}"       # 长时间等待间隔(秒)
 _DAEMON_STATE_FILE="/var/run/ruijie-daemon.state"
 _DAEMON_BACKOFF_FILE="/var/run/ruijie-daemon.backoff"
 
@@ -292,7 +271,7 @@ daemon_loop() {
                     _log_daemon "[WAIT_LONG→ONLINE] 认证成功，网络已恢复"
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
-                    _interval=300
+                    _interval=$_DAEMON_INTERVAL_LONG
                     _log_daemon "[WAIT_LONG] 离线，长时间等待中..."
                 fi
                 ;;
@@ -335,8 +314,8 @@ daemon_start() {
     _logdir="$(dirname "$LOGFILE")"
     mkdir -p "$_logdir" 2>/dev/null || log_warning "无法创建日志目录 $LOGFILE，日志可能写入失败"
 
-    # 后台启动
-    nohup "$0" --daemon-loop >> "$LOGFILE" 2>&1 &
+    # 后台启动（SCRIPT_DIR 在 ruijie.sh 中已设为绝对路径）
+    nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
     _pid=$!
     echo "$_pid" > "$PIDFILE"
 

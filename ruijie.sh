@@ -99,7 +99,7 @@ parse_args() {
                 show_help
                 exit 0
                 ;;
-            -v|--version)
+            -V|--version)
                 echo "Ruijie-Auto-Login v${RUIJIE_VERSION:-3.1} (${RUIJIE_BUILD_DATE:-2026-04-07})"
                 exit 0
                 ;;
