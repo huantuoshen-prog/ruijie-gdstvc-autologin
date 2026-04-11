@@ -198,11 +198,16 @@ _log_daemon() {
     echo "[$_ts] $1" >> "$LOGFILE" 2>/dev/null || true
 }
 
+# 守护进程内统一认证入口
+_daemon_login() {
+    do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1
+}
+
 # 状态机守护进程主循环
 daemon_loop() {
     _state="ONLINE"
 
-    # 关键修复：nohup 启动的子进程需要自行加载配置
+    # nohup 子进程需自行加载配置
     if ! is_configured; then
         _log_daemon "未检测到配置，请先运行 setup.sh"
         return 1
@@ -221,8 +226,7 @@ daemon_loop() {
     _log_daemon "守护进程已启动 (PID $$)"
     _log_daemon "在线检测间隔: ${_DAEMON_INTERVAL_ONLINE}s | 离线重试: ${_DAEMON_INTERVAL_SHORT}s 起(指数退避)"
 
-    # ONLINE 状态：每 _ONLINE_REFRESH_CYCLE 次检测后主动刷新一次 session
-    _ONLINE_REFRESH_CYCLE=10   # 约 ${_DAEMON_INTERVAL_ONLINE}s × 10 = 100 分钟刷新一次
+    _ONLINE_REFRESH_CYCLE=10
     _online_check_count=0
 
     while true; do
@@ -235,11 +239,11 @@ daemon_loop() {
                     _reset_backoff
                     _online_check_count=$((_online_check_count + 1))
 
-                    # 每 _ONLINE_REFRESH_CYCLE 次（约 100 分钟）主动刷新一次 session
+                    # 每 _ONLINE_REFRESH_CYCLE 次主动刷新一次 session
                     if [ "$_online_check_count" -ge "$_ONLINE_REFRESH_CYCLE" ]; then
                         _online_check_count=0
                         _log_daemon "[ONLINE] 定期刷新 session..."
-                        do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1 || true
+                        _daemon_login || true
                     else
                         _log_daemon "[ONLINE] 在线检测正常 (${_online_check_count}/${_ONLINE_REFRESH_CYCLE})"
                     fi
@@ -254,7 +258,7 @@ daemon_loop() {
 
             CHECKING)
                 # 首次重试：立即尝试认证
-                if do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1; then
+                if _daemon_login; then
                     _reset_backoff
                     _state="ONLINE"
                     _log_daemon "[CHECKING→ONLINE] 认证成功"
@@ -268,7 +272,7 @@ daemon_loop() {
 
             RETRYING)
                 # 指数退避重试
-                if do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1; then
+                if _daemon_login; then
                     _reset_backoff
                     _state="ONLINE"
                     _log_daemon "[RETRYING→ONLINE] 认证成功，网络已恢复"
@@ -286,7 +290,7 @@ daemon_loop() {
 
             WAIT_LONG)
                 # 长时间等待状态（每5分钟尝试一次）
-                if do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1; then
+                if _daemon_login; then
                     _reset_backoff
                     _state="ONLINE"
                     _log_daemon "[WAIT_LONG→ONLINE] 认证成功，网络已恢复"
