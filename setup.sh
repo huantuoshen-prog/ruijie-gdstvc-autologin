@@ -541,6 +541,17 @@ if [ -n "$CRON_CMD" ]; then
 fi
 
 # ========================================
+# OpenWrt: 启动守护进程
+# ========================================
+if is_openwrt; then
+    echo ""
+    echo_step "启动锐捷守护进程（后台自动重连）..."
+    "$INSTALL_TARGET/ruijie.sh" --daemon >> /var/log/ruijie-daemon.log 2>&1 || {
+        echo_warning "守护进程启动失败，可稍后手动运行: cd $INSTALL_TARGET && ./ruijie.sh --daemon"
+    }
+fi
+
+# ========================================
 # systemd 服务安装 (可选)
 # ========================================
 if command -v systemctl >/dev/null 2>&1 && ! is_openwrt; then

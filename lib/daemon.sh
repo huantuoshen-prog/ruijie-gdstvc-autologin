@@ -202,6 +202,13 @@ _log_daemon() {
 daemon_loop() {
     _state="ONLINE"
 
+    # 关键修复：nohup 启动的子进程需要自行加载配置
+    if ! is_configured; then
+        _log_daemon "未检测到配置，请先运行 setup.sh"
+        return 1
+    fi
+    load_config
+
     # 信号处理：清理所有资源
     _daemon_cleanup() {
         _log_daemon "收到退出信号，正在停止守护进程..."
@@ -214,17 +221,31 @@ daemon_loop() {
     _log_daemon "守护进程已启动 (PID $$)"
     _log_daemon "在线检测间隔: ${_DAEMON_INTERVAL_ONLINE}s | 离线重试: ${_DAEMON_INTERVAL_SHORT}s 起(指数退避)"
 
+    # ONLINE 状态：每 _ONLINE_REFRESH_CYCLE 次检测后主动刷新一次 session
+    _ONLINE_REFRESH_CYCLE=10   # 约 ${_DAEMON_INTERVAL_ONLINE}s × 10 = 100 分钟刷新一次
+    _online_check_count=0
+
     while true; do
         _write_daemon_state "$_state"
 
         case "$_state" in
             ONLINE)
-                # 长时间在线状态：定时检测
+                # 长时间在线状态：定时检测 + 定期刷新 session
                 if check_network 2>/dev/null; then
                     _reset_backoff
-                    _log_daemon "[ONLINE] 在线检测正常"
+                    _online_check_count=$((_online_check_count + 1))
+
+                    # 每 _ONLINE_REFRESH_CYCLE 次（约 100 分钟）主动刷新一次 session
+                    if [ "$_online_check_count" -ge "$_ONLINE_REFRESH_CYCLE" ]; then
+                        _online_check_count=0
+                        _log_daemon "[ONLINE] 定期刷新 session..."
+                        do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1 || true
+                    else
+                        _log_daemon "[ONLINE] 在线检测正常 (${_online_check_count}/${_ONLINE_REFRESH_CYCLE})"
+                    fi
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
+                    _online_check_count=0
                     _log_daemon "[ONLINE] 在线检测失败，进入重试"
                     _state="CHECKING"
                     _interval=0  # 立即检查
