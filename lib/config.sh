@@ -70,7 +70,8 @@ EOF
 
 # 检查是否已配置（单次文件遍历）
 is_configured() {
-    [ -f "$CONFIG_FILE" ] && grep -qE '^USERNAME=.+|^PASSWORD=.+' "$CONFIG_FILE"
+    [ -f "$CONFIG_FILE" ] || return 1
+    grep -qE '^USERNAME=.+' "$CONFIG_FILE" && grep -qE '^PASSWORD=.+' "$CONFIG_FILE"
 }
 
 # 获取账号类型 (从配置或默认值)
