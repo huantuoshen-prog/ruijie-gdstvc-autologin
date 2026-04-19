@@ -70,10 +70,24 @@ assert_equals "$(get_service_type)" "DianXin"          # 默认值
 assert_equals "$(get_service_type unknown)" "DianXin"   # 未知值
 
 echo ""
-echo "========== check_network 测试（不依赖网络）=========="
+echo "========== check_network 测试（mock）=========="
 
-# check_network 依赖网络，只验证函数存在且可调用
-assert_success check_network || true
+_orig_curl_with_proxy="$(declare -f curl_with_proxy)"
+
+# mock: 返回 204（已在线）
+curl_with_proxy() { echo "204"; }
+assert_success check_network
+
+# mock: 返回 000（网络不可达）
+curl_with_proxy() { echo "000"; }
+assert_fail check_network
+
+# mock: 返回其他状态码（异常）
+curl_with_proxy() { echo "302"; }
+assert_fail check_network
+
+# 还原原始函数，避免污染后续环境
+eval "$_orig_curl_with_proxy"
 
 echo ""
 echo "=========================================="
