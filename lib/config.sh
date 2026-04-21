@@ -101,6 +101,17 @@ interactive_config() {
         *) _at="student" ;;
     esac
 
+    if [ "$_at" = "teacher" ]; then
+        _operator="default"
+    else
+        echo -n "请选择运营商 [1]电信 [2]联通 (默认: 1): "
+        read _operator_choice
+        case "$_operator_choice" in
+            2) _operator="LianTong" ;;
+            *) _operator="DianXin" ;;
+        esac
+    fi
+
     echo -n "请输入用户名 (学号/工号): "
     read _username
     while [ -z "$_username" ]; do
@@ -140,6 +151,7 @@ interactive_config() {
         NO_PROXY_LIST="www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com"
     fi
 
+    OPERATOR="$_operator"
     save_config "$_username" "$_password" "$_at"
     log_success "配置已保存到 $CONFIG_FILE"
     echo ""

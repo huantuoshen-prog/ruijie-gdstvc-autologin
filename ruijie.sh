@@ -21,6 +21,7 @@ ACCOUNT_TYPE="student"
 DAEMON_MODE=false
 DAEMON_LOOP_MODE=false
 ACTION=""
+CLI_ARGC=$#
 
 # 自动检测调用方式（通过脚本名判断）
 _detect_mode() {
@@ -194,6 +195,11 @@ main() {
             load_config
             log_info "已从配置文件加载账号信息"
         else
+            if [ "$CLI_ARGC" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
+                interactive_config
+                load_config
+                log_info "已完成交互式配置，开始认证"
+            else
             log_error "未提供用户名和密码，且未找到配置文件"
             echo ""
             echo "请使用以下方式之一提供凭据:"
@@ -202,6 +208,7 @@ main() {
             echo "  $0 --setup  (交互式配置)"
             echo ""
             exit 1
+            fi
         fi
     fi
 

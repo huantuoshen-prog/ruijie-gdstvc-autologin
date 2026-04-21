@@ -88,7 +88,7 @@ wget -O ruijie.sh https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdst
 
 ```bash
 chmod +x ruijie.sh
-./ruijie.sh --setup   # 交互式输入学号和密码
+./ruijie.sh --setup   # 交互式输入账号、密码和运营商
 ./ruijie.sh --daemon  # 启动后台守护进程，断线自动重连
 ```
 
@@ -162,7 +162,7 @@ chmod +x /tmp/setup.sh && sh /tmp/setup.sh
 | `--stop` | 停止守护进程 | `./ruijie.sh --stop` |
 | `--status, --info` | 查看网络与认证状态 | `./ruijie.sh --status` |
 | `--logout` | 下线（断开认证，所有设备断网） | `./ruijie.sh --logout` |
-| `--setup` | 交互式配置账号信息 | `./ruijie.sh --setup` |
+| `--setup` | 交互式配置账号信息（含运营商） | `./ruijie.sh --setup` |
 | `-v, --verbose` | 显示详细调试信息 | `./ruijie.sh -v` |
 | `-h, --help` | 显示帮助信息 | `./ruijie.sh --help` |
 | `-V, --version` | 显示版本号 | `./ruijie.sh --version` |
