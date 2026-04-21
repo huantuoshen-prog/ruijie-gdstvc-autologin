@@ -50,10 +50,10 @@ log_step() {
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # 默认配置路径
-CONFIG_DIR="${HOME}/.config/ruijie"
-CONFIG_FILE="${CONFIG_DIR}/ruijie.conf"
-PIDFILE="/var/run/ruijie-daemon.pid"
-LOGFILE="/var/log/ruijie-daemon.log"
+CONFIG_DIR="${CONFIG_DIR:-${HOME}/.config/ruijie}"
+CONFIG_FILE="${CONFIG_FILE:-${CONFIG_DIR}/ruijie.conf}"
+PIDFILE="${PIDFILE:-/var/run/ruijie-daemon.pid}"
+LOGFILE="${LOGFILE:-/var/log/ruijie-daemon.log}"
 
 # 配置文件权限修复
 fix_config_perms() {
@@ -111,7 +111,7 @@ show_help() {
   --stop               停止守护进程
   --status, --info      查看网络与认证状态
   --logout              下线（断开认证）
-  --setup               交互式配置账号信息
+  --setup               交互式配置账号信息（含运营商）
   -v, --verbose         显示详细调试信息（排查问题时使用）
   -h, --help           显示帮助信息
   -V, --version        显示版本号
@@ -123,6 +123,6 @@ show_help() {
   $0 --daemon
   $0 --setup
 
-无参数运行将进入交互式配置模式。
+无参数运行时：已存在配置则直接认证；未配置且当前终端可交互时进入交互式配置。
 EOF
 }
