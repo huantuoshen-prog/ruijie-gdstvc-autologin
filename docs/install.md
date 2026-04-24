@@ -6,6 +6,16 @@
 - OpenWrt / iStoreOS / ImmortalWrt 路由器部署
 - 开机自启与持久运行
 
+## 让 Agent 帮你安装
+
+如果你希望把仓库链接、环境判断和安装验证一次性交给通用 Agent，直接复制：
+[AGENT_INSTALL_PROMPT.md](./AGENT_INSTALL_PROMPT.md)
+
+如果已经装好了、只是想让 Agent 帮你排障，再使用：
+[AGENT_DEBUG_PROMPT.md](./AGENT_DEBUG_PROMPT.md)
+
+安装 Prompt 只负责让 Agent 协助安装；Debug Prompt 只负责安装后的故障定位。
+
 ## 电脑直连
 
 ### Windows
