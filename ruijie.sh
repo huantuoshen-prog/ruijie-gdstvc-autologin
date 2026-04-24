@@ -15,6 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 . "${SCRIPT_DIR}/lib/config.sh"
 . "${SCRIPT_DIR}/lib/network.sh"
 . "${SCRIPT_DIR}/lib/daemon.sh"
+. "${SCRIPT_DIR}/lib/health.sh"
 
 # 默认值
 ACCOUNT_TYPE="student"
@@ -22,6 +23,11 @@ DAEMON_MODE=false
 DAEMON_LOOP_MODE=false
 ACTION=""
 CLI_ARGC=$#
+OUTPUT_JSON=false
+HEALTH_DURATION=""
+HEALTH_LOG_LINES="100"
+HEALTH_LOG_LEVEL=""
+HEALTH_LOG_TYPE=""
 
 # 自动检测调用方式（通过脚本名判断）
 _detect_mode() {
@@ -96,6 +102,43 @@ parse_args() {
                 ACTION="setup"
                 shift
                 ;;
+            --health-status)
+                ACTION="health-status"
+                shift
+                ;;
+            --health-enable)
+                ACTION="health-enable"
+                HEALTH_DURATION="$2"
+                shift 2
+                ;;
+            --health-disable)
+                ACTION="health-disable"
+                shift
+                ;;
+            --health-log)
+                ACTION="health-log"
+                shift
+                ;;
+            --runtime-status)
+                ACTION="runtime-status"
+                shift
+                ;;
+            --json)
+                OUTPUT_JSON=true
+                shift
+                ;;
+            --lines)
+                HEALTH_LOG_LINES="$2"
+                shift 2
+                ;;
+            --level)
+                HEALTH_LOG_LEVEL="$2"
+                shift 2
+                ;;
+            --type)
+                HEALTH_LOG_TYPE="$2"
+                shift 2
+                ;;
             -h|--help|help)
                 show_help
                 exit 0
@@ -130,6 +173,60 @@ parse_args() {
     done
 }
 
+show_status_json() {
+    _online=false
+    if check_network 2>/dev/null; then
+        _online=true
+    fi
+
+    _daemon_running=false
+    _daemon_pid=""
+    _daemon_state=""
+    _daemon_uptime=""
+    if daemon_is_running 2>/dev/null; then
+        _daemon_running=true
+        _daemon_pid="$(cat "$PIDFILE" 2>/dev/null)"
+        _daemon_state="$(cat /var/run/ruijie-daemon.state 2>/dev/null || echo "")"
+        _daemon_uptime="$(ps -p "$_daemon_pid" -o etime= 2>/dev/null || echo "")"
+    fi
+
+    _last_auth=""
+    if _last="$(get_last_auth_time 2>/dev/null)"; then
+        _last_auth="$_last"
+    fi
+
+    if is_configured 2>/dev/null; then
+        load_config 2>/dev/null || true
+    fi
+
+    health_expire_if_needed
+    health_load_config
+
+    printf '{'
+    printf '"success":true,'
+    printf '"command":"status",'
+    printf '"schema_version":%s,' "${HEALTH_JSON_SCHEMA_VERSION:-1}"
+    printf '"generated_at":"%s",' "$(health_json_escape "$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "")")"
+    printf '"online":%s,' "$_online"
+    printf '"username":"%s",' "$(health_json_escape "${USERNAME:-}")"
+    printf '"operator":"%s",' "$(health_json_escape "${OPERATOR:-DianXin}")"
+    printf '"account_type":"%s",' "$(health_json_escape "${ACCOUNT_TYPE:-student}")"
+    printf '"daemon_running":%s,' "$_daemon_running"
+    printf '"daemon_pid":"%s",' "$(health_json_escape "${_daemon_pid:-}")"
+    printf '"daemon_uptime":"%s",' "$(health_json_escape "${_daemon_uptime:-}")"
+    printf '"daemon_state":"%s",' "$(health_json_escape "${_daemon_state:-}")"
+    printf '"last_auth":"%s",' "$(health_json_escape "${_last_auth:-}")"
+    printf '"version":"%s",' "$(health_json_escape "${RUIJIE_VERSION:-3.1}")"
+    printf '"health":{'
+    printf '"enabled":%s,' "$(health_json_boolean "${HEALTH_MONITOR_ENABLED:-false}")"
+    printf '"mode":"%s",' "$(health_json_escape "${HEALTH_MONITOR_MODE:-timed}")"
+    printf '"until":%s,' "$(health_json_string "${HEALTH_MONITOR_UNTIL:-}")"
+    printf '"remaining_seconds":%s,' "$(health_json_number_or_null "$(health_remaining_seconds)")"
+    printf '"collector_active":%s' "$(health_json_boolean "$(health_collector_active)")"
+    printf '}'
+    printf '}'
+}
+
 # 主流程
 main() {
     # 守护进程状态/停止
@@ -139,7 +236,11 @@ main() {
             exit 0
             ;;
         status)
-            show_status
+            if [ "$OUTPUT_JSON" = "true" ]; then
+                show_status_json
+            else
+                show_status
+            fi
             exit 0
             ;;
         logout)
@@ -165,6 +266,49 @@ main() {
             ;;
         setup)
             interactive_config
+            exit 0
+            ;;
+        health-status)
+            if [ "$OUTPUT_JSON" = "true" ]; then
+                health_status_json
+            else
+                echo "健康监听: $(health_human_summary)"
+            fi
+            exit 0
+            ;;
+        health-enable)
+            _duration="${HEALTH_DURATION:-3d}"
+            if [ "$OUTPUT_JSON" = "true" ]; then
+                health_enable_json "$_duration"
+            else
+                health_enable "$_duration"
+                echo "健康监听已启用: ${_duration}"
+            fi
+            exit 0
+            ;;
+        health-disable)
+            if [ "$OUTPUT_JSON" = "true" ]; then
+                health_disable_json
+            else
+                health_disable
+                echo "健康监听已关闭"
+            fi
+            exit 0
+            ;;
+        health-log)
+            if [ "$OUTPUT_JSON" = "true" ]; then
+                health_log_json "${HEALTH_LOG_LINES:-100}" "${HEALTH_LOG_LEVEL:-}" "${HEALTH_LOG_TYPE:-}"
+            else
+                tail -n "${HEALTH_LOG_LINES:-100}" "${HEALTH_LOGFILE:-/var/log/ruijie-health.log}" 2>/dev/null || true
+            fi
+            exit 0
+            ;;
+        runtime-status)
+            if [ "$OUTPUT_JSON" = "true" ]; then
+                health_runtime_status_json
+            else
+                echo "$(health_runtime_json)"
+            fi
             exit 0
             ;;
     esac

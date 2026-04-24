@@ -112,6 +112,15 @@ show_help() {
   --status, --info      查看网络与认证状态
   --logout              下线（断开认证）
   --setup               交互式配置账号信息（含运营商）
+  --health-status       查看健康监听状态
+  --health-enable 时长   启用健康监听: 1d / 3d / 7d / permanent
+  --health-disable      关闭健康监听
+  --health-log          查看健康监听日志（可配合 --lines/--level/--type）
+  --runtime-status      查看运行环境摘要
+  --json                以 JSON 输出状态/健康/运行环境信息
+  --lines N             配合 --health-log 指定返回行数
+  --level LEVEL         配合 --health-log 过滤级别
+  --type TYPE           配合 --health-log 过滤类型
   -v, --verbose         显示详细调试信息（排查问题时使用）
   -h, --help           显示帮助信息
   -V, --version        显示版本号
@@ -122,6 +131,8 @@ show_help() {
   $0 --proxy http://127.0.0.1:7890 --student -u 2023000001 -p 123456
   $0 --daemon
   $0 --setup
+  $0 --health-enable 3d --json
+  $0 --health-status --json
 
 无参数运行时：已存在配置则直接认证；未配置且当前终端可交互时进入交互式配置。
 EOF

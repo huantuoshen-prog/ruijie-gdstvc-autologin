@@ -40,6 +40,7 @@ echo_step() { echo -e "${CYAN}[步骤]${NC} $1"; }
 # 配置目录
 CONFIG_DIR="${HOME}/.config/ruijie"
 CONFIG_FILE="${CONFIG_DIR}/ruijie.conf"
+HEALTH_CONFIG_FILE="${CONFIG_DIR}/health-monitor.conf"
 SYSTEMD_SRC_DIR="$(cd "$(dirname "${0}")" && pwd)/systemd/ruijie.service"
 
 # 检测 OpenWrt 路由器
@@ -284,6 +285,11 @@ SETUP_DIR="$(cd "$(dirname "${0}")" && pwd)"
 # OpenWrt: 安装到 /etc/ruijie/（持久化）；普通 Linux: 安装到 SCRIPT_DIR
 INSTALL_TARGET="$SCRIPT_DIR"
 OPENWRT_ACTIVE_DIR="/root/ruijie"
+FRESH_INSTALL=false
+
+if [ ! -f "${INSTALL_TARGET}/ruijie.sh" ] && [ ! -f "$CONFIG_FILE" ] && [ ! -f "$HEALTH_CONFIG_FILE" ]; then
+    FRESH_INSTALL=true
+fi
 
 # 复制整个目录结构（ruijie.sh + lib/）
 install_scripts() {
@@ -432,6 +438,13 @@ EOF
 
 chmod 600 "$CONFIG_FILE"
 echo_success "配置已保存到 $CONFIG_FILE (权限 600)"
+
+if [ "$FRESH_INSTALL" = "true" ] && [ -f "${SETUP_DIR}/lib/health.sh" ]; then
+    . "${SETUP_DIR}/lib/health.sh"
+    HEALTH_CONFIG_FILE="${CONFIG_DIR}/health-monitor.conf"
+    health_enable "3d"
+    echo_success "已启用健康监听（首次安装默认 3 天）"
+fi
 
 # ========================================
 # 测试认证

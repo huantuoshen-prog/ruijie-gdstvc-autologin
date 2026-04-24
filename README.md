@@ -161,8 +161,14 @@ chmod +x /tmp/setup.sh && sh /tmp/setup.sh
 | `-d, --daemon` | 以后台守护进程模式运行（推荐） | `./ruijie.sh --daemon` |
 | `--stop` | 停止守护进程 | `./ruijie.sh --stop` |
 | `--status, --info` | 查看网络与认证状态 | `./ruijie.sh --status` |
+| `--json` | 以 JSON 输出状态、健康与运行环境信息 | `./ruijie.sh --status --json` |
 | `--logout` | 下线（断开认证，所有设备断网） | `./ruijie.sh --logout` |
 | `--setup` | 交互式配置账号信息（含运营商） | `./ruijie.sh --setup` |
+| `--health-status` | 查看健康监听状态 | `./ruijie.sh --health-status --json` |
+| `--health-enable 时长` | 启用健康监听：`1d / 3d / 7d / permanent` | `./ruijie.sh --health-enable 3d` |
+| `--health-disable` | 关闭健康监听 | `./ruijie.sh --health-disable` |
+| `--health-log` | 查看健康日志，可配合 `--lines/--level/--type` | `./ruijie.sh --health-log --lines 100 --json` |
+| `--runtime-status` | 查看运行环境摘要 | `./ruijie.sh --runtime-status --json` |
 | `-v, --verbose` | 显示详细调试信息 | `./ruijie.sh -v` |
 | `-h, --help` | 显示帮助信息 | `./ruijie.sh --help` |
 | `-V, --version` | 显示版本号 | `./ruijie.sh --version` |
@@ -220,6 +226,15 @@ ln -s ruijie.sh ruijie_teacher.sh
 
 # 查看状态
 ./ruijie.sh --status
+
+# 以 JSON 供 agent 或脚本读取
+./ruijie.sh --status --json
+
+# 开启 3 天健康监听
+./ruijie.sh --health-enable 3d
+
+# 查看运行环境摘要
+./ruijie.sh --runtime-status --json
 
 # 下线（断开网络）
 ./ruijie.sh --logout
@@ -661,6 +676,44 @@ cat /var/run/ruijie-daemon.state
 cat /var/run/ruijie-daemon.backoff
 ```
 
+### 健康监听与 Agent 调试
+
+从这个版本开始，主脚本内置了一个运行环境感知的健康监听器：
+
+- 首次安装主脚本后默认开启 3 天监听窗口
+- 后续升级不会自动重新开启，可手动选择 `1d / 3d / 7d / permanent`
+- 监听器依附现有 daemon loop，不会再拉起第二个长期后台进程
+- 默认记录认证结果、daemon 状态切换、网络异常、系统摘要和运行环境信息
+- 默认只隐藏密码、Cookie、Session、Token 等敏感值，便于本地 debug 和 agent 排障
+
+常用命令：
+
+```bash
+# 查看健康状态
+./ruijie.sh --health-status
+
+# 开启 7 天监听
+./ruijie.sh --health-enable 7d
+
+# 关闭监听
+./ruijie.sh --health-disable
+
+# 查看最近 100 条健康日志（JSON）
+./ruijie.sh --health-log --lines 100 --json
+
+# 查看运行环境摘要（JSON）
+./ruijie.sh --runtime-status --json
+```
+
+推荐给自动化 agent 的接口：
+
+```bash
+./ruijie.sh --status --json
+./ruijie.sh --health-status --json
+./ruijie.sh --runtime-status --json
+./ruijie.sh --health-log --lines 100 --json
+```
+
 ---
 
 ## 守护进程详解
@@ -695,6 +748,9 @@ cat /var/run/ruijie-daemon.backoff
 | `/var/run/ruijie-daemon.backoff` | 退避计数 |
 | `/var/run/ruijie-daemon.lock` | 多实例互斥锁 |
 | `/var/log/ruijie-daemon.log` | 守护进程日志 |
+| `/var/log/ruijie-health.log` | 健康监听日志（JSONL） |
+| `/var/run/ruijie-health.status.json` | 健康监听状态快照 |
+| `/var/run/ruijie-runtime.status.json` | 运行环境快照 |
 
 ### 日志查看
 
