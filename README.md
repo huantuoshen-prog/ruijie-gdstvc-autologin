@@ -17,7 +17,7 @@
 
 ## 给 Agent 安装 / 排障
 
-- 让 Agent 帮你安装： [docs/AGENT_INSTALL_PROMPT.md](./docs/AGENT_INSTALL_PROMPT.md)
+- 让 Agent 帮你安装（默认按路由器部署）： [docs/AGENT_INSTALL_PROMPT.md](./docs/AGENT_INSTALL_PROMPT.md)
 - 已安装后让 Agent 排障： [docs/AGENT_DEBUG_PROMPT.md](./docs/AGENT_DEBUG_PROMPT.md)
 
 ## 快速入口

@@ -15,6 +15,7 @@
 [AGENT_DEBUG_PROMPT.md](./AGENT_DEBUG_PROMPT.md)
 
 安装 Prompt 只负责让 Agent 协助安装；Debug Prompt 只负责安装后的故障定位。
+默认会优先按“部署在路由器上”处理；如果 Agent 当前不在路由器终端，它应该先引导你切到 SSH / TTYD 终端，而不是直接读取本地电脑的 `/etc/*`。
 
 ## 电脑直连
 
