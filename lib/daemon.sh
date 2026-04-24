@@ -96,6 +96,9 @@ show_status() {
     echo ""
     log_info "配置:"
     log_info "  $CONFIG_FILE"
+    if command -v health_human_summary >/dev/null 2>&1; then
+        log_info "健康监听: $(health_human_summary)"
+    fi
     echo ""
 }
 
@@ -129,6 +132,7 @@ daemon_stop() {
     if daemon_is_running; then
         _pid=$(cat "$PIDFILE")
         log_info "正在停止守护进程 (PID $_pid)..."
+        _daemon_health_event "INFO" "daemon" "守护进程停止请求" "{\"pid\":\"${_pid}\"}"
         kill -TERM "$_pid" 2>/dev/null
 
         # 等待进程退出
@@ -146,6 +150,7 @@ daemon_stop() {
         > "$_LOCKFILE" 2>/dev/null || true
         # 清理状态文件
         rm -f "/var/run/ruijie-daemon.state" "/var/run/ruijie-daemon.backoff" 2>/dev/null || true
+        _daemon_health_refresh_snapshots
         log_success "守护进程已停止"
     else
         log_warning "守护进程未运行，无需停止"
@@ -198,6 +203,55 @@ _log_daemon() {
     echo "[$_ts] $1" >> "$LOGFILE" 2>/dev/null || true
 }
 
+_daemon_load_health() {
+    if command -v health_log_event >/dev/null 2>&1; then
+        return 0
+    fi
+
+    _base_dir="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
+    _health_lib="${_base_dir}/lib/health.sh"
+    [ -f "$_health_lib" ] || return 1
+    . "$_health_lib"
+}
+
+_daemon_health_enabled() {
+    _daemon_load_health || return 1
+    health_expire_if_needed >/dev/null 2>&1 || true
+    health_load_config >/dev/null 2>&1 || true
+    [ "${HEALTH_MONITOR_ENABLED:-false}" = "true" ]
+}
+
+_daemon_health_event() {
+    _level="$1"
+    _type="$2"
+    _message="$3"
+    _details="${4:-{}}"
+
+    _daemon_health_enabled || return 0
+    health_log_event "$_level" "$_type" "$_message" "$_details" >/dev/null 2>&1 || true
+}
+
+_daemon_health_refresh_snapshots() {
+    _daemon_load_health || return 0
+    health_write_runtime_snapshot >/dev/null 2>&1 || true
+    health_write_status_snapshot >/dev/null 2>&1 || true
+}
+
+_daemon_health_collect_baseline_if_due() {
+    _daemon_health_enabled || return 0
+
+    _now="$(health_now_epoch)"
+    _interval="${HEALTH_MONITOR_BASELINE_INTERVAL:-900}"
+    case "$_interval" in
+        ''|*[!0-9]*) _interval=900 ;;
+    esac
+
+    if [ -z "${_DAEMON_HEALTH_LAST_BASELINE:-}" ] || [ $((_now - _DAEMON_HEALTH_LAST_BASELINE)) -ge "$_interval" ]; then
+        _DAEMON_HEALTH_LAST_BASELINE="$_now"
+        health_log_event "INFO" "baseline" "在线基线采样" "{}" >/dev/null 2>&1 || true
+    fi
+}
+
 # 守护进程内统一认证入口
 _daemon_login() {
     do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1
@@ -225,12 +279,16 @@ daemon_loop() {
 
     _log_daemon "守护进程已启动 (PID $$)"
     _log_daemon "在线检测间隔: ${_DAEMON_INTERVAL_ONLINE}s | 离线重试: ${_DAEMON_INTERVAL_SHORT}s 起(指数退避)"
+    _daemon_health_event "INFO" "daemon" "守护进程循环已启动" "{\"pid\":\"$$\"}"
+    _daemon_health_refresh_snapshots
 
     _ONLINE_REFRESH_CYCLE=10
     _online_check_count=0
+    _daemon_loop_count=0
 
     while true; do
         _write_daemon_state "$_state"
+        _daemon_health_refresh_snapshots
 
         case "$_state" in
             ONLINE)
@@ -238,6 +296,7 @@ daemon_loop() {
                 if check_network 2>/dev/null; then
                     _reset_backoff
                     _online_check_count=$((_online_check_count + 1))
+                    _daemon_health_collect_baseline_if_due
 
                     # 每 _ONLINE_REFRESH_CYCLE 次主动刷新一次 session
                     if [ "$_online_check_count" -ge "$_ONLINE_REFRESH_CYCLE" ]; then
@@ -251,6 +310,7 @@ daemon_loop() {
                 else
                     _online_check_count=0
                     _log_daemon "[ONLINE] 在线检测失败，进入重试"
+                    _daemon_health_event "WARN" "network_error" "在线检测失败，进入重试" "{}"
                     _state="CHECKING"
                     _interval=0  # 立即检查
                 fi
@@ -262,11 +322,13 @@ daemon_loop() {
                     _reset_backoff
                     _state="ONLINE"
                     _log_daemon "[CHECKING→ONLINE] 认证成功"
+                    _daemon_health_event "OK" "auth_success" "首次重试认证成功" "{}"
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
                     _state="RETRYING"
                     _interval=$(_calc_backoff_sleep)
                     _log_daemon "[CHECKING→RETRYING] 首次重试失败，${_interval}s后退避重试"
+                    _daemon_health_event "ERROR" "auth_failed" "首次重试认证失败" "{\"next_retry_seconds\":\"${_interval}\"}"
                 fi
                 ;;
 
@@ -276,14 +338,17 @@ daemon_loop() {
                     _reset_backoff
                     _state="ONLINE"
                     _log_daemon "[RETRYING→ONLINE] 认证成功，网络已恢复"
+                    _daemon_health_event "OK" "auth_success" "退避重试认证成功" "{}"
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
                     _count=$(_get_backoff_count)
                     _interval=$(_calc_backoff_sleep)
                     _log_daemon "[RETRYING] 退避第${_count}次失败，${_interval}s后再试"
+                    _daemon_health_event "ERROR" "auth_failed" "退避重试认证失败" "{\"retry_count\":\"${_count}\",\"next_retry_seconds\":\"${_interval}\"}"
                     if [ "$_count" -ge 4 ]; then
                         _state="WAIT_LONG"
                         _log_daemon "[RETRYING→WAIT_LONG] 达到最大退避，进入长时间等待"
+                        _daemon_health_event "WARN" "state_transition" "达到最大退避，进入长时间等待" "{\"state\":\"WAIT_LONG\"}"
                     fi
                 fi
                 ;;
@@ -294,15 +359,24 @@ daemon_loop() {
                     _reset_backoff
                     _state="ONLINE"
                     _log_daemon "[WAIT_LONG→ONLINE] 认证成功，网络已恢复"
+                    _daemon_health_event "OK" "auth_success" "长时间等待后认证成功" "{}"
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
                     _interval=$_DAEMON_INTERVAL_LONG
                     _log_daemon "[WAIT_LONG] 离线，长时间等待中..."
+                    _daemon_health_event "WARN" "network_error" "长时间等待状态下仍离线" "{\"next_retry_seconds\":\"${_interval}\"}"
                 fi
                 ;;
         esac
 
         _write_daemon_state "$_state"
+        _daemon_health_refresh_snapshots
+        if [ -n "${DAEMON_TEST_MAX_LOOPS:-}" ] && [ "${DAEMON_TEST_MAX_LOOPS}" -gt 0 ] 2>/dev/null; then
+            _daemon_loop_count=$((_daemon_loop_count + 1))
+            if [ "$_daemon_loop_count" -ge "$DAEMON_TEST_MAX_LOOPS" ]; then
+                break
+            fi
+        fi
         [ "$_interval" -gt 0 ] && sleep "$_interval"
     done
 }
@@ -386,6 +460,8 @@ daemon_start() {
     # 确保进程真正启动
     sleep 1
     if kill -0 "$_pid" 2>/dev/null; then
+        _daemon_health_event "INFO" "daemon" "守护进程已启动" "{\"pid\":\"${_pid}\",\"backend\":\"${_bg_cmd}\"}"
+        _daemon_health_refresh_snapshots
         log_success "守护进程已启动 (PID $_pid, 后台工具: $_bg_cmd)"
         log_info "日志文件: $LOGFILE"
         flock -n 200 && exec 200>&- || true
