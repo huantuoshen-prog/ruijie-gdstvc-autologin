@@ -187,7 +187,7 @@ show_status_json() {
         _daemon_running=true
         _daemon_pid="$(cat "$PIDFILE" 2>/dev/null)"
         _daemon_state="$(cat /var/run/ruijie-daemon.state 2>/dev/null || echo "")"
-        _daemon_uptime="$(ps -p "$_daemon_pid" -o etime= 2>/dev/null || echo "")"
+        _daemon_uptime="$(daemon_get_uptime "$_daemon_pid" 2>/dev/null || echo "")"
     fi
 
     _last_auth=""

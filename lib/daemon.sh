@@ -16,10 +16,74 @@ get_last_auth_time() {
     if [ -f "$LOGFILE" ]; then
         _last=$(grep -E "认证成功|login success|ONLINE" "$LOGFILE" 2>/dev/null \
             | grep -oE '^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' \
-            | tail -1 | tr -d '[] ')
+            | tail -1 | sed 's/^\[//; s/\]$//')
         [ -n "$_last" ] && echo "$_last" && return 0
     fi
     return 1
+}
+
+daemon_format_duration() {
+    _seconds="$1"
+    case "$_seconds" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+
+    if [ "$_seconds" -lt 60 ]; then
+        echo "${_seconds}秒"
+    elif [ "$_seconds" -lt 3600 ]; then
+        _minutes=$((_seconds / 60))
+        _rem_seconds=$((_seconds % 60))
+        if [ "$_rem_seconds" -gt 0 ]; then
+            echo "${_minutes}分钟${_rem_seconds}秒"
+        else
+            echo "${_minutes}分钟"
+        fi
+    else
+        _hours=$((_seconds / 3600))
+        _minutes=$(((_seconds % 3600) / 60))
+        echo "${_hours}小时${_minutes}分钟"
+    fi
+}
+
+daemon_get_uptime() {
+    _pid="$1"
+    _proc_root="${2:-/proc}"
+    [ -n "$_pid" ] || return 1
+
+    _ps_uptime="$(ps -p "$_pid" -o etime= 2>/dev/null | tr -d '[:space:]')"
+    if [ -n "$_ps_uptime" ]; then
+        echo "$_ps_uptime"
+        return 0
+    fi
+
+    [ -f "${_proc_root}/uptime" ] || return 1
+    [ -f "${_proc_root}/${_pid}/stat" ] || return 1
+
+    _uptime_sec="$(awk '{print int($1)}' "${_proc_root}/uptime" 2>/dev/null)"
+    _start_jiffies="$(awk '{print $22}' "${_proc_root}/${_pid}/stat" 2>/dev/null)"
+    case "$_uptime_sec" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    case "$_start_jiffies" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+
+    _hz="${DAEMON_PROC_HZ:-}"
+    case "$_hz" in
+        ''|*[!0-9]*)
+            _hz="$(getconf CLK_TCK 2>/dev/null || echo 100)"
+            ;;
+    esac
+    case "$_hz" in
+        ''|*[!0-9]*|0) _hz=100 ;;
+    esac
+
+    _elapsed=$((_uptime_sec - _start_jiffies / _hz))
+    if [ "$_elapsed" -lt 0 ] 2>/dev/null; then
+        return 1
+    fi
+
+    daemon_format_duration "$_elapsed"
 }
 
 # 格式化相对时间
@@ -75,7 +139,7 @@ show_status() {
     log_info "守护进程:"
     if daemon_is_running; then
         _pid=$(cat "$PIDFILE" 2>/dev/null)
-        _started=$(ps -p "$_pid" -o etime= 2>/dev/null || echo "未知")
+        _started="$(daemon_get_uptime "$_pid" 2>/dev/null || echo "未知")"
         log_success "运行中 (PID $_pid, 运行时间: $_started)"
 
         # 最后认证时间
