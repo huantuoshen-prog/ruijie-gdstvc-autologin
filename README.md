@@ -20,6 +20,7 @@
 - [电脑直连快速开始](#电脑直连)
 - [路由器部署快速开始](#路由器部署)
 - [详细安装文档](./docs/install.md)
+- [Agent 安装 Prompt](./docs/AGENT_INSTALL_PROMPT.md)
 - [完整命令与配置说明](./docs/cli-and-config.md)
 - [守护进程与健康监听](./docs/daemon-and-health.md)
 - [故障排除](./docs/troubleshooting.md)
@@ -75,6 +76,9 @@ chmod +x /tmp/setup.sh && sh /tmp/setup.sh
 如果你第一次接触这套脚本，建议直接看：
 [docs/install.md](./docs/install.md)
 
+如果你想让 Agent 按仓库文档协助安装，直接复制：
+[docs/AGENT_INSTALL_PROMPT.md](./docs/AGENT_INSTALL_PROMPT.md)
+
 ## 常用命令
 
 | 场景 | 命令 |
@@ -89,6 +93,9 @@ chmod +x /tmp/setup.sh && sh /tmp/setup.sh
 | 查看运行环境摘要 | `./ruijie.sh --runtime-status --json` |
 | 查看健康日志 | `./ruijie.sh --health-log --lines 100 --json` |
 
+如果你想让 Agent 帮你安装，直接复制：
+[docs/AGENT_INSTALL_PROMPT.md](./docs/AGENT_INSTALL_PROMPT.md)
+
 如果你想把问题直接交给通用 Agent 排障，直接复制：
 [docs/AGENT_DEBUG_PROMPT.md](./docs/AGENT_DEBUG_PROMPT.md)
 
@@ -97,6 +104,7 @@ chmod +x /tmp/setup.sh && sh /tmp/setup.sh
 | 文档 | 说明 |
 |------|------|
 | [docs/install.md](./docs/install.md) | Windows / Linux / OpenWrt 的详细安装与开机自启 |
+| [docs/AGENT_INSTALL_PROMPT.md](./docs/AGENT_INSTALL_PROMPT.md) | 给通用 Agent 的现成安装 Prompt |
 | [docs/cli-and-config.md](./docs/cli-and-config.md) | 完整参数表、配置文件、代理、退出码 |
 | [docs/daemon-and-health.md](./docs/daemon-and-health.md) | 认证流程、状态机、健康监听、日志与状态文件 |
 | [docs/troubleshooting.md](./docs/troubleshooting.md) | 常见安装问题、认证问题、daemon 问题与卸载 |
