@@ -714,6 +714,9 @@ cat /var/run/ruijie-daemon.backoff
 ./ruijie.sh --health-log --lines 100 --json
 ```
 
+如果你想直接复制一份给通用 agent 用的排障模板，可以看：
+[docs/AGENT_DEBUG_PROMPT.md](./docs/AGENT_DEBUG_PROMPT.md)
+
 ---
 
 ## 守护进程详解
