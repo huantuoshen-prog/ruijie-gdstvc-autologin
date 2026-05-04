@@ -272,7 +272,12 @@ _daemon_load_health() {
         return 0
     fi
 
-    _base_dir="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
+    if [ -n "${SCRIPT_DIR:-}" ]; then
+        _base_dir="$SCRIPT_DIR"
+    else
+        _base_source="${BASH_SOURCE[0]:-$0}"
+        _base_dir="$(cd "$(dirname "$_base_source")/.." >/dev/null 2>&1 && printf '%s' "$PWD")"
+    fi
     _health_lib="${_base_dir}/lib/health.sh"
     [ -f "$_health_lib" ] || return 1
     . "$_health_lib"
@@ -289,7 +294,8 @@ _daemon_health_event() {
     _level="$1"
     _type="$2"
     _message="$3"
-    _details="${4:-{}}"
+    _details="${4-}"
+    [ -n "$_details" ] || _details="{}"
 
     _daemon_health_enabled || return 0
     health_log_event "$_level" "$_type" "$_message" "$_details" >/dev/null 2>&1 || true
@@ -459,6 +465,15 @@ _daemon_get_bg_cmd() {
     fi
 }
 
+_daemon_entry_script() {
+    _default_entry="${SCRIPT_DIR:-.}/ruijie.sh"
+    if [ -f "$_default_entry" ]; then
+        echo "$_default_entry"
+    else
+        echo "${SCRIPT_DIR:-.}/$(basename "$0")"
+    fi
+}
+
 daemon_start() {
     # 尝试获取锁，防止多实例启动
     exec 200>"$_LOCKFILE"
@@ -505,17 +520,18 @@ daemon_start() {
     # 创建日志目录
     _logdir="$(dirname "$LOGFILE")"
     mkdir -p "$_logdir" 2>/dev/null || log_warning "无法创建日志目录 $LOGFILE，日志可能写入失败"
+    _daemon_entry="$(_daemon_entry_script)"
 
     # 后台启动
     case "$_bg_cmd" in
         "nohup")
-            nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            nohup "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
             ;;
         "busybox nohup")
-            busybox nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            busybox nohup "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
             ;;
         "setsid")
-            setsid "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            setsid "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
             ;;
     esac
     _pid=$!

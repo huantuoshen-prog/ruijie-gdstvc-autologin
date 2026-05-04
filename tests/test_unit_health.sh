@@ -36,6 +36,7 @@ HEALTH_LOGFILE="${TMPDIR}/ruijie-health.log"
 HEALTH_STATUS_FILE="${TMPDIR}/ruijie-health.status.json"
 RUNTIME_STATUS_FILE="${TMPDIR}/ruijie-runtime.status.json"
 HEALTH_LOG_ROTATE_BYTES=256
+HEALTH_PANEL_WEB_ROOT_CANDIDATES=""
 
 echo "========== 健康监听配置测试 =========="
 
@@ -96,6 +97,11 @@ if grep -q 'abc123' "$HEALTH_LOGFILE"; then
 else
     pass "健康日志会脱敏会话类字段"
 fi
+if grep -q '}}}$' "$HEALTH_LOGFILE"; then
+    fail "健康日志条目尾部多出右花括号"
+else
+    pass "健康日志条目不会多出右花括号"
+fi
 
 health_log_event "INFO" "baseline" "first" "{}" >/dev/null
 health_log_event "INFO" "baseline" "second" "{}" >/dev/null
@@ -118,6 +124,18 @@ echo "$runtime_json" | grep -q '"platform":"' \
 echo "$runtime_json" | grep -q '"health_logfile":"' \
     && pass "运行环境 JSON 包含 health_logfile" \
     || fail "运行环境 JSON 缺少 health_logfile"
+
+mkdir -p "${TMPDIR}/panel-root"
+HEALTH_PANEL_WEB_ROOT_CANDIDATES="${TMPDIR}/panel-root ${TMPDIR}/missing-root"
+panel_root="$(health_detect_panel_web_root)"
+[ "$panel_root" = "${TMPDIR}/panel-root" ] \
+    && pass "panel_web_root 检测支持 overlay 风格之外的候选路径" \
+    || fail "panel_web_root 检测错误: ${panel_root:-<empty>}"
+
+panel_installed="$(health_detect_panel_installed)"
+[ "$panel_installed" = "true" ] \
+    && pass "检测到有效的 panel_web_root 时 panel_installed=true" \
+    || fail "检测到有效的 panel_web_root 时 panel_installed 错误: ${panel_installed:-<empty>}"
 
 echo ""
 echo "=========================================="

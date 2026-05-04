@@ -257,21 +257,25 @@ health_detect_nohup_backend() {
 }
 
 health_detect_panel_installed() {
-    if [ -f /www/ruijie-panel/index.html ] || [ -f /www/ruijie-panel/dist/index.html ] || [ -d /etc/ruijie-panel ]; then
+    if [ -n "$(health_detect_panel_web_root)" ] || [ -d /etc/ruijie-panel ] || [ -f /etc/ruijie-panel/auth.conf ] || [ -f /etc/init.d/ruijie-panel ]; then
         echo "true"
     else
         echo "false"
     fi
 }
 
+health_panel_root_candidates() {
+    printf '%s\n' "${HEALTH_PANEL_WEB_ROOT_CANDIDATES:-/overlay/usr/www/ruijie-web /mnt/sda1/ruijie-web /www/ruijie-web /www/ruijie-panel /www/ruijie-panel/dist}"
+}
+
 health_detect_panel_web_root() {
-    if [ -d /www/ruijie-panel ]; then
-        echo "/www/ruijie-panel"
-    elif [ -d /www/ruijie-panel/dist ]; then
-        echo "/www/ruijie-panel/dist"
-    else
-        echo ""
-    fi
+    for _root in $(health_panel_root_candidates); do
+        if [ -d "$_root" ]; then
+            echo "$_root"
+            return 0
+        fi
+    done
+    echo ""
 }
 
 health_daemon_running() {
@@ -306,7 +310,12 @@ health_runtime_json() {
     _busybox="$(health_detect_busybox)"
     _curl="$(health_detect_curl)"
     _nohup_backend="$(health_detect_nohup_backend)"
-    _script_dir="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd 2>/dev/null || pwd)}"
+    if [ -n "${SCRIPT_DIR:-}" ]; then
+        _script_dir="$SCRIPT_DIR"
+    else
+        _script_source="${BASH_SOURCE[0]:-$0}"
+        _script_dir="$(cd "$(dirname "$_script_source")/.." >/dev/null 2>&1 && printf '%s' "$PWD")"
+    fi
     _panel_installed="$(health_detect_panel_installed)"
     _panel_web_root="$(health_detect_panel_web_root)"
     _daemon_running="$(health_daemon_running)"
@@ -420,7 +429,9 @@ health_log_event() {
     _level="${1:-INFO}"
     _type="${2:-event}"
     _message="$(health_redact_text "${3:-}")"
-    _details="$(health_mask_json_fields "${4:-{}}")"
+    _raw_details="${4-}"
+    [ -n "$_raw_details" ] || _raw_details="{}"
+    _details="$(health_mask_json_fields "$_raw_details")"
     case "$_details" in
         \{*\}|\[*\]) ;;
         *) _details="{}" ;;
