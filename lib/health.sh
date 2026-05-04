@@ -257,21 +257,25 @@ health_detect_nohup_backend() {
 }
 
 health_detect_panel_installed() {
-    if [ -f /www/ruijie-panel/index.html ] || [ -f /www/ruijie-panel/dist/index.html ] || [ -d /etc/ruijie-panel ]; then
+    if [ -n "$(health_detect_panel_web_root)" ] || [ -d /etc/ruijie-panel ] || [ -f /etc/ruijie-panel/auth.conf ] || [ -f /etc/init.d/ruijie-panel ]; then
         echo "true"
     else
         echo "false"
     fi
 }
 
+health_panel_root_candidates() {
+    printf '%s\n' "${HEALTH_PANEL_WEB_ROOT_CANDIDATES:-/overlay/usr/www/ruijie-web /mnt/sda1/ruijie-web /www/ruijie-web /www/ruijie-panel /www/ruijie-panel/dist}"
+}
+
 health_detect_panel_web_root() {
-    if [ -d /www/ruijie-panel ]; then
-        echo "/www/ruijie-panel"
-    elif [ -d /www/ruijie-panel/dist ]; then
-        echo "/www/ruijie-panel/dist"
-    else
-        echo ""
-    fi
+    for _root in $(health_panel_root_candidates); do
+        if [ -d "$_root" ]; then
+            echo "$_root"
+            return 0
+        fi
+    done
+    echo ""
 }
 
 health_daemon_running() {

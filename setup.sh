@@ -284,7 +284,6 @@ SETUP_DIR="$(cd "$(dirname "${0}")" && pwd)"
 
 # OpenWrt: 安装到 /etc/ruijie/（持久化）；普通 Linux: 安装到 SCRIPT_DIR
 INSTALL_TARGET="$SCRIPT_DIR"
-OPENWRT_ACTIVE_DIR="/root/ruijie"
 FRESH_INSTALL=false
 
 if [ ! -f "${INSTALL_TARGET}/ruijie.sh" ] && [ ! -f "$CONFIG_FILE" ] && [ ! -f "$HEALTH_CONFIG_FILE" ]; then
@@ -310,29 +309,80 @@ install_scripts() {
     chmod +x "$_target/lib"/*.sh
 }
 
+configure_openwrt_rc_local() {
+    _rc_local="/etc/rc.local"
+    _tmpfile="$(mktemp)" || return 1
+
+    if [ ! -f "$_rc_local" ]; then
+        cat > "$_rc_local" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+    fi
+
+    awk '
+        BEGIN { skip = 0 }
+        $0 == "# ruijie-auto-login" { skip = 1; next }
+        skip && /^exit 0$/ { skip = 0 }
+        !skip { print }
+    ' "$_rc_local" > "$_tmpfile"
+
+    awk '
+        BEGIN { inserted = 0 }
+        /^exit 0$/ && !inserted {
+            print "# ruijie-auto-login"
+            print "if [ -x /etc/ruijie/ruijie.sh ]; then"
+            print "    /etc/ruijie/ruijie.sh --daemon >> /var/log/ruijie-daemon.log 2>&1"
+            print "fi"
+            inserted = 1
+        }
+        { print }
+        END {
+            if (!inserted) {
+                print "# ruijie-auto-login"
+                print "if [ -x /etc/ruijie/ruijie.sh ]; then"
+                print "    /etc/ruijie/ruijie.sh --daemon >> /var/log/ruijie-daemon.log 2>&1"
+                print "fi"
+                print "exit 0"
+            }
+        }
+    ' "$_tmpfile" > "${_tmpfile}.new"
+
+    mv "${_tmpfile}.new" "$_rc_local"
+    rm -f "$_tmpfile"
+    chmod +x "$_rc_local" 2>/dev/null || true
+}
+
+remove_legacy_cron_entries() {
+    _tmpfile="$(mktemp)" || return 1
+
+    if command -v crontab >/dev/null 2>&1; then
+        crontab -l 2>/dev/null | grep -vE 'ruijie-auto-login|ruijie-login\.log|/etc/ruijie/daemon|/root/ruijie' > "$_tmpfile" || true
+        crontab "$_tmpfile" 2>/dev/null || true
+        rm -f "$_tmpfile"
+        return 0
+    fi
+
+    if [ -f /etc/crontabs/root ]; then
+        grep -vE 'ruijie-auto-login|ruijie-login\.log|/etc/ruijie/daemon|/root/ruijie' /etc/crontabs/root > "$_tmpfile" || true
+        mv "$_tmpfile" /etc/crontabs/root
+        /etc/init.d/cron restart 2>/dev/null || true
+        return 0
+    fi
+
+    rm -f "$_tmpfile"
+    return 0
+}
+
 # 安装到目标目录
 install_scripts "$INSTALL_TARGET"
 echo_success "脚本安装到 $INSTALL_TARGET"
 
-# OpenWrt 特殊处理: 同步到 /root/（立即生效）
+# OpenWrt 特殊处理: 配置开机自启
 if is_openwrt; then
-    install_scripts "$OPENWRT_ACTIVE_DIR"
-    echo_success "同步脚本到 $OPENWRT_ACTIVE_DIR (重启后生效)"
-
-    # 设置 /etc/rc.local 开机同步（持久化方案）
-    if grep -qF "# ruijie-auto-login" /etc/rc.local 2>/dev/null; then
-        echo_info "rc.local 已配置开机自启，跳过"
-    else
-        echo_info "配置开机自启..."
-        sed -i '/ruijie/d' /etc/rc.local 2>/dev/null || true
-        {
-            echo ""
-            echo "# ruijie-auto-login"
-            echo "[ -d /etc/ruijie ] && cp -r /etc/ruijie /root/ruijie"
-        } >> /etc/rc.local
-        chmod +x /etc/rc.local 2>/dev/null || true
-        echo_success "已配置 /etc/rc.local 开机同步"
-    fi
+    echo_info "配置 OpenWrt 开机自启..."
+    configure_openwrt_rc_local
+    echo_success "已配置 /etc/rc.local 开机启动守护进程"
 fi
 
 # 创建符号链接（普通 Linux 才需要到 PATH）
@@ -452,9 +502,6 @@ fi
 echo ""
 echo_step "正在测试认证..."
 TEST_SCRIPT="$INSTALL_TARGET/ruijie.sh"
-if is_openwrt && [ -f "$OPENWRT_ACTIVE_DIR/ruijie.sh" ]; then
-    TEST_SCRIPT="$OPENWRT_ACTIVE_DIR/ruijie.sh"
-fi
 test_result=$("$TEST_SCRIPT" --${ACCOUNT_TYPE} -u "$username" -p "$password" --operator "$OPERATOR" 2>&1)
 
 if echo "$test_result" | grep -qi "认证成功\|网络连接正常\|already\|无需认证"; then
@@ -542,10 +589,11 @@ install_cron_task() {
 
 if [ -n "$CRON_CMD" ]; then
     mkdir -p /var/log
+    remove_legacy_cron_entries
 
     # 安全: 不在 crontab 中存储密码
     if is_openwrt; then
-        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh >> /var/log/ruijie-login.log 2>&1"
+        CRON_TASK="*/5 * * * * test -f /var/run/ruijie-daemon.pid && kill -0 \$(cat /var/run/ruijie-daemon.pid) 2>/dev/null || $INSTALL_TARGET/ruijie.sh --daemon >> /var/log/ruijie-daemon.log 2>&1"
     else
         CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh"
     fi

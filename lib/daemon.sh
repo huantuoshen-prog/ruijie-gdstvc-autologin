@@ -459,6 +459,15 @@ _daemon_get_bg_cmd() {
     fi
 }
 
+_daemon_entry_script() {
+    _default_entry="${SCRIPT_DIR:-.}/ruijie.sh"
+    if [ -f "$_default_entry" ]; then
+        echo "$_default_entry"
+    else
+        echo "${SCRIPT_DIR:-.}/$(basename "$0")"
+    fi
+}
+
 daemon_start() {
     # 尝试获取锁，防止多实例启动
     exec 200>"$_LOCKFILE"
@@ -505,17 +514,18 @@ daemon_start() {
     # 创建日志目录
     _logdir="$(dirname "$LOGFILE")"
     mkdir -p "$_logdir" 2>/dev/null || log_warning "无法创建日志目录 $LOGFILE，日志可能写入失败"
+    _daemon_entry="$(_daemon_entry_script)"
 
     # 后台启动
     case "$_bg_cmd" in
         "nohup")
-            nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            nohup "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
             ;;
         "busybox nohup")
-            busybox nohup "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            busybox nohup "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
             ;;
         "setsid")
-            setsid "${SCRIPT_DIR:-.}"/"$(basename "$0")" --daemon-loop >> "$LOGFILE" 2>&1 &
+            setsid "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
             ;;
     esac
     _pid=$!
