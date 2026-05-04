@@ -97,6 +97,11 @@ if grep -q 'abc123' "$HEALTH_LOGFILE"; then
 else
     pass "健康日志会脱敏会话类字段"
 fi
+if grep -q '}}}$' "$HEALTH_LOGFILE"; then
+    fail "健康日志条目尾部多出右花括号"
+else
+    pass "健康日志条目不会多出右花括号"
+fi
 
 health_log_event "INFO" "baseline" "first" "{}" >/dev/null
 health_log_event "INFO" "baseline" "second" "{}" >/dev/null

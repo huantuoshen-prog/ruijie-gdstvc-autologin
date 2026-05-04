@@ -272,7 +272,12 @@ _daemon_load_health() {
         return 0
     fi
 
-    _base_dir="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
+    if [ -n "${SCRIPT_DIR:-}" ]; then
+        _base_dir="$SCRIPT_DIR"
+    else
+        _base_source="${BASH_SOURCE[0]:-$0}"
+        _base_dir="$(cd "$(dirname "$_base_source")/.." >/dev/null 2>&1 && printf '%s' "$PWD")"
+    fi
     _health_lib="${_base_dir}/lib/health.sh"
     [ -f "$_health_lib" ] || return 1
     . "$_health_lib"
@@ -289,7 +294,8 @@ _daemon_health_event() {
     _level="$1"
     _type="$2"
     _message="$3"
-    _details="${4:-{}}"
+    _details="${4-}"
+    [ -n "$_details" ] || _details="{}"
 
     _daemon_health_enabled || return 0
     health_log_event "$_level" "$_type" "$_message" "$_details" >/dev/null 2>&1 || true

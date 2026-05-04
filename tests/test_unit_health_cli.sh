@@ -86,6 +86,14 @@ echo "$status_json" | grep -q '"runtime":{' \
     && pass "health-status JSON 内嵌 runtime 摘要" \
     || fail "health-status JSON 未内嵌 runtime 摘要"
 
+health_log_json="$(run_cli --health-log --lines 10 --json 2>/dev/null || true)"
+echo "$health_log_json" | grep -q '"entries":\[' \
+    && pass "health-log JSON 返回 entries 数组" \
+    || fail "health-log JSON 未返回 entries 数组"
+echo "$health_log_json" | grep -q '"total":' \
+    && pass "health-log JSON 返回 total" \
+    || fail "health-log JSON 未返回 total"
+
 runtime_json="$(run_cli --runtime-status --json 2>/dev/null || true)"
 echo "$runtime_json" | grep -q '"command":"runtime-status"' \
     && pass "runtime-status JSON 返回 command" \
@@ -102,6 +110,13 @@ elif printf '%s' "$runtime_json" | "$PYTHON_BIN" -c 'import json,sys; json.load(
     pass "runtime-status 返回合法 JSON"
 else
     fail "runtime-status 未返回合法 JSON"
+fi
+if [ -n "$PYTHON_BIN" ]; then
+    if printf '%s' "$health_log_json" | "$PYTHON_BIN" -c 'import json,sys; json.load(sys.stdin)' >/dev/null 2>&1; then
+        pass "health-log 返回合法 JSON"
+    else
+        fail "health-log 未返回合法 JSON"
+    fi
 fi
 
 disable_json="$(run_cli --health-disable --json 2>/dev/null || true)"
