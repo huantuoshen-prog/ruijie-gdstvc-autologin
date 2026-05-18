@@ -384,7 +384,7 @@ www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.and
 ```bash
 # Ruijie Auto-Login Configuration
 # Generated 2026-04-07 12:00:00
-USERNAME=1720240564
+USERNAME=2023000000
 PASSWORD=your_password
 ACCOUNT_TYPE=student
 OPERATOR=DianXin
@@ -404,7 +404,7 @@ NO_PROXY_LIST=www.google.cn,www.google.com,connectivitycheck.gstatic.com,connect
 
 ```bash
 # 使用代理登录
-./ruijie.sh -u 1720240564 -p 密码 --proxy http://127.0.0.1:7890
+./ruijie.sh -u 2023000000 -p 密码 --proxy http://127.0.0.1:7890
 
 # 配置持久化代理
 # 编辑 ~/.config/ruijie/ruijie.conf
@@ -537,7 +537,7 @@ chmod +x /tmp/setup.sh && sh /tmp/setup.sh
   [2] 联通 (9栋 - 22栋)
 请选择 [1/2]: 1
 
-请输入用户名 (学号/工号): 1720240564
+请输入用户名 (学号/工号): 2023000000
 请输入密码: （输入时隐藏）
 
 是否配置 HTTP 代理？直接回车跳过（不使用代理）: （直接回车）
@@ -581,10 +581,10 @@ tail -f /var/log/ruijie-daemon.log
 
 ```bash
 # 切换到联通网络
-./ruijie.sh --operator LianTong -u 1720240564 -p 密码
+./ruijie.sh --operator LianTong -u 2023000000 -p 密码
 
 # 切换到电信网络
-./ruijie.sh --operator DianXin -u 1720240564 -p 密码
+./ruijie.sh --operator DianXin -u 2023000000 -p 密码
 ```
 
 ### 代理配置
@@ -593,7 +593,7 @@ tail -f /var/log/ruijie-daemon.log
 
 ```bash
 # 命令行指定代理
-./ruijie.sh -u 1720240564 -p 密码 --proxy http://127.0.0.1:7890
+./ruijie.sh -u 2023000000 -p 密码 --proxy http://127.0.0.1:7890
 
 # 持久化代理配置
 # 编辑 ~/.config/ruijie/ruijie.conf
@@ -648,7 +648,7 @@ crontab -e
 不使用守护进程，手动单次认证：
 
 ```bash
-./ruijie.sh -u 1720240564 -p 密码
+./ruijie.sh -u 2023000000 -p 密码
 ```
 
 ### 查看状态机当前状态
@@ -773,7 +773,7 @@ opkg update && opkg install busybox
 
 请确认使用 `--operator LianTong` 参数，并确认宿舍楼栋（9栋-22栋使用联通）：
 ```bash
-./ruijie.sh --operator LianTong -u 1720240564 -p 密码
+./ruijie.sh --operator LianTong -u 2023000000 -p 密码
 ```
 </details>
 

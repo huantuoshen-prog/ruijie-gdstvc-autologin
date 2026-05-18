@@ -235,7 +235,7 @@ tail -f /var/log/ruijie-daemon.log
 ```bash
 # Ruijie Auto-Login Configuration
 # Generated 2026-04-07 12:00:00
-USERNAME=1720240564
+USERNAME=2023000000
 PASSWORD=your_password
 ACCOUNT_TYPE=student
 OPERATOR=DianXin
