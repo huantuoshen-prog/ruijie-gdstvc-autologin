@@ -123,7 +123,7 @@ www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.and
 ### 配置示例
 
 ```bash
-USERNAME=1720240564
+USERNAME=2023000000
 PASSWORD=your_password
 ACCOUNT_TYPE=student
 OPERATOR=DianXin
@@ -141,7 +141,7 @@ NO_PROXY_LIST=www.google.cn,www.google.com,connectivitycheck.gstatic.com,connect
 - 某些环境里不直连外部探测地址
 
 ```bash
-./ruijie.sh -u 1720240564 -p 密码 --proxy http://127.0.0.1:7890
+./ruijie.sh -u 2023000000 -p 密码 --proxy http://127.0.0.1:7890
 ```
 
 如果你想继续看 daemon、状态机和健康监听：
