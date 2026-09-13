@@ -51,7 +51,8 @@ log_step() {
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # 默认配置路径
-CONFIG_DIR="${CONFIG_DIR:-${HOME}/.config/ruijie}"
+RUIJIE_CONFIG_HOME="${RUIJIE_CONFIG_HOME:-${HOME:-/root}/.config/ruijie}"
+CONFIG_DIR="${CONFIG_DIR:-$RUIJIE_CONFIG_HOME}"
 CONFIG_FILE="${CONFIG_FILE:-${CONFIG_DIR}/ruijie.conf}"
 PIDFILE="${PIDFILE:-/var/run/ruijie-daemon.pid}"
 LOGFILE="${LOGFILE:-/var/log/ruijie-daemon.log}"

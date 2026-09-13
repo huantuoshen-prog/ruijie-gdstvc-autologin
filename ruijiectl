@@ -139,7 +139,7 @@ logs_action() {
         *) json_response false INVALID_ARGUMENT 'invalid log source'; return 2 ;;
     esac
     local payload
-    payload="$(jq -Rn --arg source "$source" '[inputs | {ts:"",level:"INFO",msg:.}] | {source:$source,lines:.,total:length}' < <(tail -n "$lines" "$file" 2>/dev/null))"
+    payload="$(jq -Rn --arg source "$source" '[inputs | {ts:"",level:"INFO",msg:.}] | {source:$source,lines:.,total:length}' < <(tail -n "$lines" "$file" 2>/dev/null | sed $'s/\e\\[[0-9;]*m//g'))"
     json_response true OK 'logs' "$payload"
 }
 
@@ -151,7 +151,10 @@ case "${1:-}" in
     health) require_dependencies && health_action "${2:-status}" "${3:-3d}" ;;
     logs) require_dependencies && logs_action "${2:-daemon}" "${3:-100}" ;;
     _auth-run) load_config; do_login "${USERNAME:-}" "${PASSWORD:-}" "${ACCOUNT_TYPE:-student}" "${OPERATOR:-DianXin}" "${2:-ensure}" ;;
-    runtime) require_dependencies && json_response true OK 'runtime' "$(jq -cn --arg version "$RUIJIE_VERSION" --arg build "$RUIJIE_BUILD_DATE" '{version:$version,build_date:$build,platform:"openwrt",required_commands:["bash","curl","jq","flock","sha256sum"]}')" ;;
+    runtime) require_dependencies && {
+        _runtime_payload="$(health_runtime_json)"
+        json_response true OK 'runtime' "$(jq -c --arg version "$RUIJIE_VERSION" --arg build "$RUIJIE_BUILD_DATE" '. + {version:$version,build_date:$build,required_commands:["bash","curl","jq","flock","sha256sum"]}' <<<"$_runtime_payload")"
+    } ;;
     daemon-run) require_openwrt && require_dependencies && daemon_loop ;;
     *) printf 'usage: ruijiectl {status|runtime|config|service|auth|daemon-run}\n' >&2; exit 2;;
 esac
