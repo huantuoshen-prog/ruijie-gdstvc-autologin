@@ -1,6 +1,6 @@
-# 广东科学技术职业学院校园网锐捷认证工具
+# 广东科学技术职业学院校园网锐捷认证：OpenWrt 自动登录脚本
 
-> 面向广东科学技术职业学院校园网的锐捷 Web 认证自动登录工具，支持单电脑直连和 OpenWrt 路由器部署。
+> 面向广东科学技术职业学院（广科院、GDSTVC）新生与宿舍路由器用户的锐捷校园网自动认证工具。支持 OpenWrt、iStoreOS、ImmortalWrt，适用于校园网、锐捷认证、断线自动重连和电信/联通线路。
 
 [![CI](https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/actions/workflows/ci.yml/badge.svg)](https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/actions)
 [![ShellCheck](https://img.shields.io/badge/ShellCheck-passed-green)](https://github.com/koalaman/shellcheck)
@@ -14,6 +14,20 @@
 - 电信 / 联通双运营商
 - 健康监听、运行环境摘要和 Agent 友好 JSON CLI
 - 可选的 [Web 管理面板](https://github.com/huantuoshen-prog/ruijie-web-panel)
+
+## 这是做什么的？
+
+如果你的宿舍路由器已连接广东科学技术职业学院校园网，本项目会让路由器完成锐捷 Web 认证，并在网络中断后按节奏尝试恢复认证。它适合希望让手机、电脑、平板等设备通过同一台 OpenWrt 路由器稳定上网的同学。
+
+它不是学校官方软件，也不会替代学校网络规定；账号和密码仍由你本人保管。
+
+## 适用范围
+
+- 学校：广东科学技术职业学院 / 广科院 / GDSTVC
+- 路由器系统：OpenWrt、iStoreOS、ImmortalWrt
+- 认证类型：锐捷 Web 认证、ePortal / captive portal
+- 线路：校园电信、校园联通
+- 使用方式：命令行认证核心，或搭配 Web 管理面板
 
 ## 给 Agent 安装 / 排障
 
@@ -35,36 +49,17 @@
 
 ## 项目简介
 
-如果你只想让一台电脑上网，可以直接在本机运行 `ruijie.sh`。
-如果你想让整宿舍设备共用一条校园网认证，可以把它装到 OpenWrt / iStoreOS / ImmortalWrt 路由器上长期运行。
+本项目只支持 OpenWrt 系路由器。如果你想让整宿舍设备共用一条校园网认证，可以把它部署到 OpenWrt / iStoreOS / ImmortalWrt 路由器上长期运行。
 
 推荐使用方式：
 
 | 场景 | 推荐方式 | 说明 |
 |------|------|------|
-| 单台电脑直连 | 本机运行脚本 | 最快上手，适合没有路由器时 |
 | 宿舍多设备共享 | 路由器部署 | 一次配置后自动保活 |
 | 想要图形界面 | 搭配 `ruijie-web-panel` | 浏览器里管理账号、daemon 和日志 |
 | 想让 Agent 排障 | 开启健康监听 | 用 `--json` 接口和健康日志定位问题 |
 
 ## 快速开始
-
-### 电脑直连
-
-适合只有一台电脑要上网、没有路由器的场景。
-
-```bash
-# Windows（先装 Git Bash）
-curl -LO https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdstvc-autologin/main/ruijie.sh
-
-# Linux / macOS
-wget -O ruijie.sh https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdstvc-autologin/main/ruijie.sh
-
-chmod +x ruijie.sh
-./ruijie.sh --setup
-./ruijie.sh --daemon
-./ruijie.sh --status
-```
 
 ### 路由器部署
 
@@ -114,6 +109,10 @@ chmod +x /tmp/setup.sh && sh /tmp/setup.sh
 |------|--------|------|
 | **ruijie-web-panel** | [链接](https://github.com/huantuoshen-prog/ruijie-web-panel) | Web 管理面板，可在浏览器管理账号和守护进程 |
 | Qclaw | [链接](https://github.com/qiuzhi2046/Qclaw) | OpenClaw 桌面管家（非本项目） |
+
+## 一起完善它
+
+欢迎提交 issue：新生安装体验、不同宿舍楼的认证差异、OpenWrt 固件兼容性和文档错字都很有价值。提交时请不要附上账号、密码、MAC 地址、内网 IP 或完整认证链接。
 
 ## 许可证
 
