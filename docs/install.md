@@ -1,147 +1,41 @@
-# 安装指南
+# OpenWrt 安装与回滚
 
-这份文档是 `ruijie-gdstvc-autologin` 的详细安装入口，按运行环境拆成三类：
+本版本仅支持 OpenWrt、iStoreOS、ImmortalWrt 及使用 `procd` 的衍生固件。不会修改 `opkg` 软件源，也不会在安装阶段发起校园网认证。
 
-- 单电脑直连
-- OpenWrt / iStoreOS / ImmortalWrt 路由器部署
-- 开机自启与持久运行
+先确认能力：
 
-## 让 Agent 帮你安装
-
-如果你希望把仓库链接、环境判断和安装验证一次性交给通用 Agent，直接复制：
-[AGENT_INSTALL_PROMPT.md](./AGENT_INSTALL_PROMPT.md)
-
-如果已经装好了、只是想让 Agent 帮你排障，再使用：
-[AGENT_DEBUG_PROMPT.md](./AGENT_DEBUG_PROMPT.md)
-
-安装 Prompt 只负责让 Agent 协助安装；Debug Prompt 只负责安装后的故障定位。
-默认会优先按“部署在路由器上”处理；如果 Agent 当前不在路由器终端，它应该先引导你切到 SSH / TTYD 终端，而不是直接读取本地电脑的 `/etc/*`。
-
-## 电脑直连
-
-### Windows
-
-前置要求：
-
-- 安装 [Git for Windows](https://git-scm.com/download/win)
-- 使用 Git Bash 运行脚本
-
-安装步骤：
-
-```bash
-curl -LO https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdstvc-autologin/main/ruijie.sh
-chmod +x ruijie.sh
-./ruijie.sh --setup
-./ruijie.sh --daemon
+```sh
+command -v bash curl jq flock sha256sum tar
+test -x /sbin/procd || echo '此固件不支持 procd'
 ```
 
-### Linux / macOS
+从固定 GitHub Release 下载完整 `ruijie-core-<version>.tar.gz`，并解压；不要执行来自 `main` 的单文件下载。进入解压目录后运行：
 
-```bash
-wget -O ruijie.sh https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdstvc-autologin/main/ruijie.sh
-
-# 或 curl
-curl -LO https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdstvc-autologin/main/ruijie.sh
-
-chmod +x ruijie.sh
-./ruijie.sh --setup
-./ruijie.sh --daemon
+```sh
+sh install.sh
 ```
 
-## 路由器部署
+安装器不会调用认证下线接口。但若它发现旧守护进程仍在运行，或发现旧的 `rc.local` / cron 启动项，会直接拒绝安装，不修改文件、不停止服务也不触碰网络。先在计划维护时段完成旧服务迁移，再重新运行安装器；这避免新旧自动重连体系同时接管连接。
 
-适用前提：
+安装器会校验 `manifest.sha256`，暂存并切换 `/etc/ruijie`，保留上一个完整版本到 `/etc/ruijie.rollback`，并只在核心运行环境检查通过后完成安装。账号配置位于 `/root/.config/ruijie`，不会被代码升级覆盖。
 
-- 路由器已刷 OpenWrt / iStoreOS / ImmortalWrt 等衍生固件
-- WAN 口已连接校园网（墙壁网线）
-- 可以进入路由器终端
+安装完成后，显式配置账号或使用现有配置，然后再认证：
 
-### 如何进入路由器终端
-
-#### 方式一：图形后台进入
-
-1. 连接路由器 WiFi
-2. 浏览器打开：
-   - `http://192.168.5.1`（常见于 iStoreOS）
-   - `http://192.168.1.1`（OpenWrt 默认）
-3. 找到「系统」→「TTYD 终端」或「系统工具」→「命令行终端」
-
-#### 方式二：SSH
-
-```bash
-ssh root@192.168.5.1
-# 或
-ssh root@192.168.1.1
+```sh
+/etc/ruijie/ruijiectl config get
+/etc/ruijie/ruijiectl auth ensure
+/etc/ruijie/ruijiectl service start
+/etc/ruijie/ruijiectl status
 ```
 
-### 安装步骤
+`service stop` 只停止自动重连；`auth logout` 会主动断开校园网认证。服务的开机自启使用 `service enable` / `service disable` 管理。
 
-```bash
-wget -O /tmp/setup.sh \
-  https://raw.githubusercontent.com/huantuoshen-prog/ruijie-gdstvc-autologin/main/setup.sh
-chmod +x /tmp/setup.sh && sh /tmp/setup.sh
+若升级后健康检查或人工验收失败，运行：
+
+```sh
+/etc/ruijie/rollback.sh
 ```
 
-安装脚本会依次询问：
+回滚会恢复上一个完整代码版本和对应服务。配置格式发生变更时，应先备份 `/root/.config/ruijie`，并只使用同一 Release 附带的回滚工具。
 
-- 账号类型（学生 / 教师）
-- 用户名
-- 校园网密码
-- 学生账号运营商（电信 / 联通）
-- 是否配置代理
-
-### 安装完成后验证
-
-```bash
-# 检查脚本目录
-ls -la /etc/ruijie/
-
-# 查看状态
-/etc/ruijie/ruijie.sh --status
-
-# 查看守护进程
-ps | grep ruijie
-
-# 查看日志
-tail -f /var/log/ruijie-daemon.log
-```
-
-## 开机自启
-
-### OpenWrt 路由器
-
-安装脚本会自动配置开机自启。
-
-如果你需要手动检查，可查看：
-
-```bash
-cat /etc/rc.local
-```
-
-### Linux systemd
-
-普通 Linux 电脑上可启用 systemd：
-
-```bash
-systemctl enable ruijie
-systemctl start ruijie
-systemctl status ruijie
-```
-
-## 卸载
-
-```bash
-sh uninstall.sh
-```
-
-如果你希望彻底清除配置：
-
-```bash
-sh uninstall.sh --purge
-```
-
-## 下一步阅读
-
-- 想看全部命令： [cli-and-config.md](./cli-and-config.md)
-- 想了解 daemon 和健康监听： [daemon-and-health.md](./daemon-and-health.md)
-- 安装中遇到问题： [troubleshooting.md](./troubleshooting.md)
+面板必须安装与核心版本兼容的固定 Release。面板包内的 `compatibility.conf` 当前要求核心 `4.0.0`、接口 schema `2`。

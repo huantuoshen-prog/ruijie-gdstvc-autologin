@@ -2,7 +2,7 @@
 # ========================================
 # 锐捷认证安装配置脚本 v3.1
 # 广东科学技术职业学院专用
-# 支持普通 Linux 和 OpenWrt 路由器
+# 仅支持 OpenWrt 及其衍生固件
 # ========================================
 
 echo ""
@@ -41,7 +41,6 @@ echo_step() { echo -e "${CYAN}[步骤]${NC} $1"; }
 CONFIG_DIR="${HOME}/.config/ruijie"
 CONFIG_FILE="${CONFIG_DIR}/ruijie.conf"
 HEALTH_CONFIG_FILE="${CONFIG_DIR}/health-monitor.conf"
-SYSTEMD_SRC_DIR="$(cd "$(dirname "${0}")" && pwd)/systemd/ruijie.service"
 
 # 检测 OpenWrt 路由器
 is_openwrt() {
@@ -49,12 +48,12 @@ is_openwrt() {
 }
 
 # 设置安装路径
-if is_openwrt; then
-    echo_info "检测到 OpenWrt 路由器环境"
-    SCRIPT_DIR="/etc/ruijie"
-else
-    SCRIPT_DIR="/usr/local/bin"
+if ! is_openwrt; then
+    echo_error "此版本仅支持 OpenWrt、iStoreOS 或 ImmortalWrt 路由器"
+    exit 1
 fi
+echo_info "检测到 OpenWrt 路由器环境"
+SCRIPT_DIR="/etc/ruijie"
 
 clear
 echo ""
@@ -80,42 +79,8 @@ echo_success "权限检查通过"
 # ========================================
 echo_step "检查必要工具..."
 
-# ---- nohup 后台运行工具（守护进程必需）----
-check_nohup() {
-    if command -v nohup >/dev/null 2>&1 && nohup echo >/dev/null 2>&1; then
-        echo_success "nohup 已就绪"
-        return 0
-    elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qw "nohup" \
-         && busybox nohup echo >/dev/null 2>&1; then
-        echo_success "busybox nohup 已就绪"
-        return 0
-    elif command -v setsid >/dev/null 2>&1; then
-        echo_success "setsid 已就绪（可替代 nohup）"
-        return 0
-    fi
-
-    echo_warning "未检测到后台运行工具 (nohup/setsid)"
-    echo_info "正在修复 opkg 源并安装 coreutils-nohup..."
-
-    if fix_opkg_feeds; then
-        if install_via_opkg "coreutils-nohup"; then
-            echo_success "coreutils-nohup 安装成功"
-            return 0
-        fi
-    fi
-
-    # 全部失败，给出兜底提示
-    echo ""
-    echo_error "无法自动安装 nohup，请在路由器上手动执行以下命令后重新运行本脚本："
-    echo ""
-    echo "  sed -i 's/SNAPSHOT/19.07.10/g' /etc/opkg/distfeeds.conf"
-    echo "  opkg update && opkg install coreutils-nohup"
-    echo ""
-    read -p "按回车退出，配置好 nohup 后重新运行 setup.sh: "
-    exit 1
-}
-
-# ---- opkg 源修复 ----
+# 历史版本曾尝试修改 opkg 软件源并安装 nohup。procd 不需要 nohup，
+# 安装器也不应改变固件的软件源；以下能力只由显式依赖检查决定。
 # 核心问题：固件报告的 VERSION 常为 "19.07-SNAPSHOT"，
 # 但 downloads.openwrt.org 上 SNAPSHOT 目录早已删除。
 # 必须探测实际可用版本（如 19.07.10）再替换 feeds。
@@ -260,19 +225,13 @@ install_via_opkg() {
     return 1
 }
 
-check_nohup
-
-if ! command -v curl >/dev/null 2>&1; then
-    echo_warning "curl 未安装，正在尝试安装..."
-    install_via_opkg "curl"
-fi
-
-if command -v curl >/dev/null 2>&1; then
-    echo_success "curl 已就绪"
-else
-    echo_error "curl 安装失败，请手动安装后重试"
-    exit 1
-fi
+for _dep in bash curl jq flock sha256sum; do
+    if ! command -v "$_dep" >/dev/null 2>&1; then
+        echo_error "缺少依赖: $_dep。请先通过 opkg 安装后重试。"
+        exit 1
+    fi
+done
+echo_success "运行依赖已就绪: bash curl jq flock sha256sum"
 
 # ========================================
 # 下载/安装主脚本
@@ -300,12 +259,13 @@ install_scripts() {
     cp "${SETUP_DIR}/ruijie_student.sh" "$_target/ruijie_student.sh"
     cp "${SETUP_DIR}/ruijie_teacher.sh" "$_target/ruijie_teacher.sh"
     cp "${SETUP_DIR}/uninstall.sh" "$_target/uninstall.sh"
+    cp "${SETUP_DIR}/ruijiectl" "$_target/ruijiectl"
 
     for lib in "${SETUP_DIR}/lib"/*.sh; do
         [ -f "$lib" ] && cp "$lib" "$_target/lib/"
     done
 
-    chmod +x "$_target/ruijie.sh" "$_target/ruijie_student.sh" "$_target/ruijie_teacher.sh" "$_target/uninstall.sh"
+    chmod +x "$_target/ruijie.sh" "$_target/ruijie_student.sh" "$_target/ruijie_teacher.sh" "$_target/uninstall.sh" "$_target/ruijiectl"
     chmod +x "$_target/lib"/*.sh
 }
 
@@ -377,19 +337,6 @@ remove_legacy_cron_entries() {
 # 安装到目标目录
 install_scripts "$INSTALL_TARGET"
 echo_success "脚本安装到 $INSTALL_TARGET"
-
-# OpenWrt 特殊处理: 配置开机自启
-if is_openwrt; then
-    echo_info "配置 OpenWrt 开机自启..."
-    configure_openwrt_rc_local
-    echo_success "已配置 /etc/rc.local 开机启动守护进程"
-fi
-
-# 创建符号链接（普通 Linux 才需要到 PATH）
-if ! is_openwrt; then
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_student.sh" 2>/dev/null || true
-    ln -sf "${SCRIPT_DIR}/ruijie.sh" "${SCRIPT_DIR}/ruijie_teacher.sh" 2>/dev/null || true
-fi
 
 # ========================================
 # 交互式账号配置
@@ -467,26 +414,14 @@ echo_success "账号信息已记录"
 # 保存配置文件 (安全存储)
 # ========================================
 echo_step "保存配置文件..."
+. "${SETUP_DIR}/lib/config.sh"
 
-mkdir -p "$CONFIG_DIR"
-cat > "$CONFIG_FILE" << EOF
-# Ruijie Auto-Login Configuration
-# Generated $(date '+%Y-%m-%d %H:%M:%S')
-USERNAME=$username
-PASSWORD=$password
-ACCOUNT_TYPE=$ACCOUNT_TYPE
-OPERATOR=$OPERATOR
-DAEMON_INTERVAL=300
-
-# --- Proxy Settings ---
-# HTTP proxy, empty = no proxy (default)
-PROXY_URL=${proxy_url_input:-}
-PROXY_URL_HTTPS=${proxy_https_val:-}
-# Bypass proxy for these targets (comma-separated)
-NO_PROXY_LIST=${no_proxy_input:-www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com}
-EOF
-
-chmod 600 "$CONFIG_FILE"
+if ! config_write "$username" "$password" "$ACCOUNT_TYPE" "$OPERATOR" 300 \
+    "${proxy_url_input:-}" "${proxy_https_val:-}" \
+    "${no_proxy_input:-www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com}"; then
+    echo_error "配置写入失败，安装已停止"
+    exit 1
+fi
 echo_success "配置已保存到 $CONFIG_FILE (权限 600)"
 
 if [ "$FRESH_INSTALL" = "true" ] && [ -f "${SETUP_DIR}/lib/health.sh" ]; then
@@ -496,32 +431,9 @@ if [ "$FRESH_INSTALL" = "true" ] && [ -f "${SETUP_DIR}/lib/health.sh" ]; then
     echo_success "已启用健康监听（首次安装默认 3 天）"
 fi
 
-# ========================================
-# 测试认证
-# ========================================
-echo ""
-echo_step "正在测试认证..."
-TEST_SCRIPT="$INSTALL_TARGET/ruijie.sh"
-test_result=$("$TEST_SCRIPT" --${ACCOUNT_TYPE} -u "$username" -p "$password" --operator "$OPERATOR" 2>&1)
-
-if echo "$test_result" | grep -qi "认证成功\|网络连接正常\|already\|无需认证"; then
-    echo_success "认证测试通过！"
-elif echo "$test_result" | grep -qi "连接正常"; then
-    echo_success "认证测试通过（网络已在线）！"
-else
-    echo ""
-    echo_warning "认证测试未完全成功，服务器返回如下:"
-    echo "----------------------------------------"
-    echo "$test_result" | head -20
-    echo "----------------------------------------"
-    echo ""
-    read -p "是否仍要继续完成安装？(y/N，默认N): " confirm
-    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-        echo_info "已取消安装，请检查账号密码后重新运行"
-        exit 1
-    fi
-    echo_info "继续完成安装..."
-fi
+# 安装阶段不发起校园网认证。用户可在确认 WAN 已接入后显式运行：
+# /etc/ruijie/ruijiectl auth ensure
+echo_info "已跳过校园网认证测试；认证需要由你在部署阶段显式触发。"
 
 # ========================================
 # 配置定时任务
@@ -587,57 +499,16 @@ install_cron_task() {
     fi
 }
 
-if [ -n "$CRON_CMD" ]; then
-    mkdir -p /var/log
-    remove_legacy_cron_entries
-
-    # 安全: 不在 crontab 中存储密码
-    if is_openwrt; then
-        CRON_TASK="*/5 * * * * test -f /var/run/ruijie-daemon.pid && kill -0 \$(cat /var/run/ruijie-daemon.pid) 2>/dev/null || $INSTALL_TARGET/ruijie.sh --daemon >> /var/log/ruijie-daemon.log 2>&1"
-    else
-        CRON_TASK="*/5 5-7 * * * $INSTALL_TARGET/ruijie.sh"
-    fi
-
-    install_cron_task "$CRON_TASK" || echo_warning "定时任务配置未成功，可稍后手动添加"
-fi
+remove_legacy_cron_entries
 
 # ========================================
 # OpenWrt: 启动守护进程
 # ========================================
-if is_openwrt; then
-    echo ""
-    echo_step "启动锐捷守护进程（后台自动重连）..."
-    "$INSTALL_TARGET/ruijie.sh" --daemon >> /var/log/ruijie-daemon.log 2>&1 || {
-        echo_warning "守护进程启动失败，可稍后手动运行: cd $INSTALL_TARGET && ./ruijie.sh --daemon"
-    }
-fi
-
-# ========================================
-# systemd 服务安装 (可选)
-# ========================================
-if command -v systemctl >/dev/null 2>&1 && ! is_openwrt; then
-    echo ""
-    echo_step "是否安装 systemd 服务? (后台守护进程，自动重连)"
-    echo "  [y] 是，安装 systemd 服务 (推荐)"
-    echo "  [n] 否，跳过"
-    echo -n "请选择 [y/N]: "
-    read systemd_choice
-
-    if [ "$systemd_choice" = "y" ] || [ "$systemd_choice" = "Y" ]; then
-        if [ -f "$SYSTEMD_SRC_DIR" ]; then
-            cp "$SYSTEMD_SRC_DIR" /etc/systemd/system/ruijie.service
-            systemctl daemon-reload
-            systemctl enable ruijie.service
-            echo_success "systemd 服务已安装并启用"
-            echo ""
-            echo "  启动服务:   systemctl start ruijie"
-            echo "  查看状态:   systemctl status ruijie"
-            echo "  查看日志:   journalctl -u ruijie -f"
-        else
-            echo_warning "systemd 服务文件不存在，跳过"
-        fi
-    fi
-fi
+echo_step "注册 procd 服务..."
+cp "${SETUP_DIR}/init.d/ruijie" /etc/init.d/ruijie
+chmod +x /etc/init.d/ruijie
+/etc/init.d/ruijie enable
+/etc/init.d/ruijie start || echo_warning "服务启动失败，请执行 /etc/ruijie/ruijiectl status 查看原因"
 
 # ========================================
 # 完成
@@ -649,11 +520,11 @@ echo_success "=============================================="
 echo ""
 echo "下一步："
 echo ""
-echo "  1. 启动守护进程（断线自动重连，推荐）:"
-echo "     cd /etc/ruijie && ./ruijie.sh --daemon"
+echo "  1. 启动自动重连服务（推荐）:"
+echo "     /etc/ruijie/ruijiectl service start"
 echo ""
 echo "  2. 查看运行状态:"
-echo "     ./ruijie.sh --status"
+echo "     /etc/ruijie/ruijiectl status"
 echo ""
 echo "  3. 如遇问题，查看日志:"
 echo "     tail -f /var/log/ruijie-daemon.log"

@@ -338,6 +338,11 @@ daemon_loop() {
     fi
     load_config
 
+    # procd runs this loop in the foreground.  Publish its PID so status does
+    # not infer process state from command-name matching.
+    mkdir -p "$(dirname "$PIDFILE")" 2>/dev/null || true
+    printf '%s' "$$" > "$PIDFILE" 2>/dev/null || true
+
     # 信号处理：清理所有资源
     _daemon_cleanup() {
         _log_daemon "收到退出信号，正在停止守护进程..."

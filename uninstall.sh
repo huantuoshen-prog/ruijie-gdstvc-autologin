@@ -16,7 +16,7 @@ for arg in "$@"; do
         --help|-h)
             echo "用法: $(basename "$0") [选项]"
             echo "选项:"
-            echo "  --purge, -p   彻底清除（包括配置文件、账号信息、日志、rc.local）"
+            echo "  --purge, -p   彻底清除（包括配置文件、账号信息和日志）"
             echo "  --force, -f   无需确认直接卸载"
             echo "  --help, -h    显示帮助"
             exit 0
@@ -50,12 +50,9 @@ is_openwrt() {
 }
 
 # ========================================
-# 路径定义（覆盖 OpenWrt + 普通 Linux 所有可能位置）
+# OpenWrt 路径定义
 # ========================================
-SYSTEMD_SERVICE="/etc/systemd/system/ruijie.service"
-SYSTEMD_SERVICE2="/lib/systemd/system/ruijie.service"
 INIT_SCRIPT="/etc/init.d/ruijie"
-INIT_SCRIPT2="/etc/init.d/ruijie-panel"
 CONFIG_DIR="${HOME}/.config/ruijie"
 CONFIG_FILE="${CONFIG_DIR}/ruijie.conf"
 PIDFILE="/var/run/ruijie-daemon.pid"
@@ -66,7 +63,6 @@ BACKOFF_FILE="/var/run/ruijie-daemon.backoff"
 
 # OpenWrt 特有路径
 OPENWRT_SCRIPT_DIR="/etc/ruijie"
-OPENWRT_ACTIVE_DIR="/root/ruijie"
 
 # ========================================
 # 停止守护进程
@@ -91,35 +87,20 @@ echo "  守护进程已停止"
 # 禁用服务
 # ========================================
 echo "[2/6] 禁用服务..."
-# systemd
-for _svc in "$SYSTEMD_SERVICE" "$SYSTEMD_SERVICE2"; do
-    [ -f "$_svc" ] && systemctl disable ruijie 2>/dev/null || true
-    [ -f "$_svc" ] && rm -f "$_svc" && echo "  已移除 $_svc"
-done
-systemctl daemon-reload 2>/dev/null || true
 # OpenWrt init.d
-for _svc in "$INIT_SCRIPT" "$INIT_SCRIPT2"; do
+for _svc in "$INIT_SCRIPT"; do
     [ -f "$_svc" ] && "$_svc" disable 2>/dev/null || true
     [ -f "$_svc" ] && rm -f "$_svc" && echo "  已移除 $_svc"
 done
-# rc.local 开机同步清理（OpenWrt）
-if [ -f /etc/rc.local ] && grep -q "ruijie" /etc/rc.local 2>/dev/null; then
-    sed -i '/ruijie/d' /etc/rc.local 2>/dev/null
-    echo "  已清理 /etc/rc.local 中的 ruijie 启动项"
-fi
 
 # ========================================
 # 移除脚本文件
 # ========================================
 echo "[3/6] 移除脚本文件..."
 # OpenWrt
-for _dir in "$OPENWRT_SCRIPT_DIR" "$OPENWRT_ACTIVE_DIR"; do
+for _dir in "$OPENWRT_SCRIPT_DIR"; do
     [ -d "$_dir" ] && rm -rf "$_dir" && echo "  已移除 $_dir"
 done
-# 普通 Linux
-[ -f "/usr/local/bin/ruijie.sh" ] && rm -f "/usr/local/bin/ruijie.sh" && echo "  已移除 /usr/local/bin/ruijie.sh"
-[ -f "/usr/local/bin/ruijie_student.sh" ] && rm -f "/usr/local/bin/ruijie_student.sh"
-[ -f "/usr/local/bin/ruijie_teacher.sh" ] && rm -f "/usr/local/bin/ruijie_teacher.sh"
 
 # ========================================
 # 移除配置文件（--purge 时）
@@ -140,23 +121,7 @@ for _f in "$PIDFILE" "$LOCKFILE" "$STATE_FILE" "$BACKOFF_FILE" "$LOGFILE"; do
     [ -f "$_f" ] && rm -f "$_f" && echo "  已移除 $_f"
 done
 
-# ========================================
-# 清理 crontab
-# ========================================
-echo "[6/6] 清理定时任务..."
-_clean_cron() {
-    local _cronfile="$1"
-    [ -f "$_cronfile" ] || return
-    if grep -q "ruijie" "$_cronfile" 2>/dev/null; then
-        sed -i '/ruijie/d' "$_cronfile" 2>/dev/null
-        echo "  已清理 $_cronfile 中的 ruijie 任务"
-    fi
-}
-_clean_cron "/etc/crontabs/root"
-_clean_cron "/etc/crontabs/$(whoami)"
-if command -v crontab >/dev/null 2>&1; then
-    crontab -l 2>/dev/null | grep -v "ruijie" | crontab - 2>/dev/null && echo "  已清理 crontab 中的 ruijie 任务"
-fi
+echo "[6/6] 未修改 cron 或 rc.local（本版本不使用它们）"
 
 echo ""
 echo "=========================================="
@@ -165,9 +130,9 @@ echo "=========================================="
 echo ""
 
 if [ "$PURGE" = "true" ]; then
-    echo "已彻底清除：守护进程、脚本、配置、账号、日志、定时任务、rc.local"
+    echo "已彻底清除：守护进程、脚本、配置、账号和日志"
 else
-    echo "已清除：守护进程、脚本、服务、定时任务、日志"
+    echo "已清除：守护进程、脚本、服务和日志"
     echo "已保留：配置文件（账号信息）"
 fi
 echo ""

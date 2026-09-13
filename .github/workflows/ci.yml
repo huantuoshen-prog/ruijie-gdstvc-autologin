@@ -36,14 +36,17 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x ruijie.sh lib/*.sh tests/*.sh
+          chmod +x ruijie.sh ruijiectl install.sh rollback.sh release.sh init.d/ruijie lib/*.sh tests/*.sh
           # 创建符号链接（向后兼容）
           rm -f ruijie_student.sh ruijie_teacher.sh
           ln -s ruijie.sh ruijie_student.sh
           ln -s ruijie.sh ruijie_teacher.sh
 
       - name: Unit tests (含扩展单元测试)
-        run: bash tests/run_tests.sh unit
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          bash tests/run_tests.sh unit
 
       - name: Integration tests
         run: bash tests/run_tests.sh integration

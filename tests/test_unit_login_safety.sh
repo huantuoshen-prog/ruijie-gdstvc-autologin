@@ -48,7 +48,7 @@ else
     fi
 fi
 
-# 登录请求必须携带 -m 30，避免认证服务器无响应时永久阻塞。
+# 登录请求必须有连接和总超时，避免认证服务器无响应时永久阻塞。
 CHECK_COUNT_FILE="${TMPDIR}/check-count"
 printf '0' > "$CHECK_COUNT_FILE"
 AUTH_ARGS_FILE="${TMPDIR}/auth_args.txt"
@@ -78,10 +78,10 @@ curl_with_proxy() {
 }
 
 if do_login "user" "pass" "student" "DianXin" >/tmp/ruijie-login-timeout.out 2>&1; then
-    if grep -q -- ' -m 30 ' "$AUTH_ARGS_FILE"; then
-        pass "登录 curl 请求包含 -m 30 超时"
+    if grep -q -- ' --connect-timeout 10 ' "$AUTH_ARGS_FILE" && grep -q -- ' --max-time 30 ' "$AUTH_ARGS_FILE"; then
+        pass "登录 curl 请求包含连接与总超时"
     else
-        fail "登录 curl 请求缺少 -m 30 超时: $(cat "$AUTH_ARGS_FILE" 2>/dev/null)"
+        fail "登录 curl 请求缺少连接或总超时: $(cat "$AUTH_ARGS_FILE" 2>/dev/null)"
     fi
 else
     fail "mock 登录流程应成功"

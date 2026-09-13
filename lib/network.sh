@@ -37,11 +37,11 @@ get_service_type() {
 # 检查网络是否已连接 (HTTP 204 = 已认证)
 # 显式区分: 204=在线, 000=超时/不可达, 其他=异常
 check_network() {
-    _code=$(curl_with_proxy -s -I -m 10 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>&1)
+    _code=$(curl_with_proxy -sS -I --connect-timeout 3 --max-time 5 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>/dev/null)
     case "$_code" in
         204) return 0 ;;
-        000) log_warning "网络不可达（连接超时或无网络）" ;;
-        *)   log_warning "网络检测意外响应码: $_code" ;;
+        000) : ;;
+        *)   : ;;
     esac
     return 1
 }
@@ -52,6 +52,7 @@ do_login() {
     _password="$2"
     _account_type="${3:-student}"
     _operator="${4:-${OPERATOR:-DianXin}}"
+    _mode="${5:-ensure}"
 
     # 函数入口立即清理上次的 EXTRA_NO_PROXY，RETURN trap 确保任何退出路径都清理
     unset EXTRA_NO_PROXY 2>/dev/null
@@ -59,7 +60,7 @@ do_login() {
 
     # 检查是否已连接
     log_step "检查网络连接状态..."
-    if check_network; then
+    if [ "$_mode" != "reauth" ] && check_network; then
         log_success "网络连接正常，无需认证"
         return 0
     fi
@@ -68,7 +69,7 @@ do_login() {
 
     # 获取登录页面URL (对齐工作脚本: curl generate_204 + awk 提取)
     log_step "获取登录页面URL..."
-    _login_page_url=$(curl_with_proxy -s "http://www.google.cn/generate_204" | awk -F \' '{print $2}')
+    _login_page_url=$(curl_with_proxy -sS --connect-timeout 5 --max-time 15 "http://www.google.cn/generate_204" 2>/dev/null | awk -F \' '{print $2}')
 
     if [ -z "$_login_page_url" ]; then
         log_error "无法获取登录页面URL"
@@ -139,10 +140,15 @@ do_login() {
     log_info "用户名: $_username"
     log_info "账号类型: $_account_type"
 
-    authResult=$(curl_with_proxy -s -m 30 -A "$USER_AGENT" \
+    authResult=$(curl_with_proxy -sS --connect-timeout 10 --max-time 30 -A "$USER_AGENT" \
         -e "${_login_page_url}" \
         -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
-        -d "userId=${_username}&password=${_password}&service=${_service}&queryString=${_queryString}&operatorPwd=&operatorUserId=&validcode=&passwordEncrypt=false" \
+        --data-urlencode "userId=${_username}" \
+        --data-urlencode "password=${_password}" \
+        --data-urlencode "service=${_service}" \
+        --data-urlencode "queryString=${_queryString}" \
+        --data-urlencode "operatorPwd=" --data-urlencode "operatorUserId=" \
+        --data-urlencode "validcode=" --data-urlencode "passwordEncrypt=false" \
         -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" \
         -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
         "${_login_url}" 2>&1)
@@ -210,7 +216,7 @@ do_logout() {
     log_step "正在发送下线请求..."
 
     # 获取 portal URL 以构建 logout 地址
-    _login_page_url=$(curl_with_proxy -s "http://www.google.cn/generate_204" 2>&1 | awk -F \' '{print $2}')
+    _login_page_url=$(curl_with_proxy -sS --connect-timeout 5 --max-time 15 "http://www.google.cn/generate_204" 2>/dev/null | awk -F \' '{print $2}')
 
     if [ -n "$_login_page_url" ]; then
         _logout_url="$(build_login_url "$_login_page_url" | sed 's/method=login/method=logout/')"
@@ -221,7 +227,7 @@ do_logout() {
 
     log_info "下线URL: $_logout_url"
 
-    _result=$(curl_with_proxy -s -A "$USER_AGENT" \
+    _result=$(curl_with_proxy -sS --connect-timeout 10 --max-time 30 -A "$USER_AGENT" \
         -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
         -d "userId=${_username}" \
         -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
