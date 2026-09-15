@@ -7,7 +7,7 @@ OUT="$ROOT/dist/ruijie-core-${VERSION}.tar.gz"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/ruijie-core/lib" "$STAGE/ruijie-core/init.d"
-for file in ruijie.sh ruijie_student.sh ruijie_teacher.sh ruijiectl uninstall.sh install.sh rollback.sh; do cp "$ROOT/$file" "$STAGE/ruijie-core/$file"; done
+for file in ruijie.sh ruijie_student.sh ruijie_teacher.sh ruijiectl install.sh uninstall.sh rollback.sh; do cp "$ROOT/$file" "$STAGE/ruijie-core/$file"; done
 cp "$ROOT"/lib/*.sh "$STAGE/ruijie-core/lib/"
 cp "$ROOT/init.d/ruijie" "$STAGE/ruijie-core/init.d/"
 (cd "$STAGE/ruijie-core" && find . -type f ! -name manifest.sha256 -print0 | sort -z | xargs -0 sha256sum > manifest.sha256)
