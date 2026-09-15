@@ -21,8 +21,9 @@ _cfg_load() {
         case "$line" in
             \#*|"") continue ;;
         esac
-        key="$(echo "$line" | cut -d'=' -f1)"
-        value="$(echo "$line" | cut -d'=' -f2-)"
+        case "$line" in *=*) ;; *) continue ;; esac
+        key="${line%%=*}"
+        value="${line#*=}"
         case "$key" in
             USERNAME)      USERNAME="$value" ;;
             PASSWORD)      PASSWORD="$value" ;;
@@ -74,9 +75,13 @@ config_write() {
     _lock="${CONFIG_FILE}.lock"
     exec 9>"$_lock" || return 1
     flock -n -x 9 || { exec 9>&-; return 75; }
+    if [ "${9+x}" = x ] && [ "$9" != "$(config_revision)" ]; then
+        exec 9>&-
+        return 76
+    fi
     _tmp="$(mktemp "${CONFIG_FILE}.tmp.XXXXXX")" || { exec 9>&-; return 1; }
     umask 077
-    cat > "$_tmp" << EOF
+    if ! cat > "$_tmp" << EOF
 # Ruijie Auto-Login Configuration
 # Generated $(date '+%Y-%m-%d %H:%M:%S')
 USERNAME=${_username}
@@ -92,6 +97,11 @@ PROXY_URL_HTTPS=${_proxy_https}
 # Bypass proxy for these targets (comma-separated)
 NO_PROXY_LIST=${_no_proxy}
 EOF
+    then
+        rm -f "$_tmp"
+        exec 9>&-
+        return 1
+    fi
     chmod 600 "$_tmp" || { rm -f "$_tmp"; exec 9>&-; return 1; }
     mv -f "$_tmp" "$CONFIG_FILE" || { rm -f "$_tmp"; exec 9>&-; return 1; }
     exec 9>&-
@@ -181,7 +191,7 @@ interactive_config() {
     fi
 
     OPERATOR="$_operator"
-    save_config "$_username" "$_password" "$_at"
+    save_config "$_username" "$_password" "$_at" || return 1
     log_success "配置已保存到 $CONFIG_FILE"
     echo ""
 }

@@ -50,3 +50,6 @@ jobs:
 
       - name: Integration tests
         run: bash tests/run_tests.sh integration
+
+      - name: Configuration release regressions
+        run: bash tests/test_release_config.sh

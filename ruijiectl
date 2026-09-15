@@ -73,9 +73,11 @@ config_set() {
     payload="$(cat)"
     jq -e . >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'invalid JSON'; return 2; }
     jq -e '[.username,.password,.operator,.proxy_url,.proxy_url_https,.account_type] | all(.[]?; type == "string" and (test("[\\u0000\\r\\n]") | not))' >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'values cannot contain unsupported control characters'; return 2; }
-    expected="$(jq -r '.revision // ""' <<<"$payload")"
+    jq -e '.revision | type == "string" and length > 0' >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'revision is required'; return 2; }
+    expected="$(jq -r '.revision' <<<"$payload")"
     revision="$(config_revision)"
     [ -z "$expected" ] || [ "$expected" = "$revision" ] || { json_response false CONFLICT 'configuration has changed'; return 3; }
+    load_config
     username="$(jq -r '.username // ""' <<<"$payload")"; password="$(jq -r '.password // ""' <<<"$payload")"
     operator="$(jq -r '.operator // "DianXin"' <<<"$payload")"; proxy="$(jq -r '.proxy_url // ""' <<<"$payload")"
     proxy_https="$(jq -r '.proxy_url_https // ""' <<<"$payload")"; account_type="$(jq -r '.account_type // "student"' <<<"$payload")"
@@ -84,14 +86,15 @@ config_set() {
         password="${PASSWORD:-}"
     fi
     [ -n "$username" ] && [ -n "$password" ] || { json_response false INVALID_ARGUMENT 'username and password are required'; return 2; }
-    case "$operator" in DianXin|LianTong) ;; *) json_response false INVALID_ARGUMENT 'invalid operator'; return 2;; esac
+    case "$account_type:$operator" in student:DianXin|student:LianTong|teacher:default|teacher:DianXin|teacher:LianTong) ;; *) json_response false INVALID_ARGUMENT 'invalid operator'; return 2;; esac
     case "$account_type" in student|teacher) ;; *) json_response false INVALID_ARGUMENT 'invalid account type'; return 2;; esac
     local value
     for value in "$username" "$password" "$account_type" "$operator" "$proxy" "$proxy_https"; do
         config_validate_value "$value" || { json_response false INVALID_ARGUMENT 'values cannot contain line breaks'; return 2; }
     done
-    config_write "$username" "$password" "$account_type" "$operator" "${DAEMON_INTERVAL:-300}" "$proxy" "$proxy_https" "${NO_PROXY_LIST:-}"
+    config_write "$username" "$password" "$account_type" "$operator" "${DAEMON_INTERVAL:-300}" "$proxy" "$proxy_https" "${NO_PROXY_LIST:-}" "$expected"
     _write_result=$?
+    [ "$_write_result" -ne 76 ] || { json_response false CONFLICT 'configuration has changed'; return 3; }
     [ "$_write_result" -eq 0 ] || { [ "$_write_result" -eq 75 ] && { json_response false BUSY 'configuration is being updated'; return 3; }; json_response false INTERNAL 'configuration write failed'; return 1; }
     json_response true OK 'configuration saved' "$(config_get)"
 }
