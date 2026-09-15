@@ -21,16 +21,16 @@ fail() { echo "${RED}[FAIL]${NC} $1"; FAIL=$((FAIL + 1)); }
 
 echo "========== OpenWrt 安装脚本回归测试 =========="
 
-if grep -q 'ruijie\.sh --daemon >> /var/log/ruijie-daemon\.log 2>&1' "$SETUP_FILE"; then
-    pass "rc.local/cron 使用 ruijie.sh --daemon 作为守护进程入口"
+if grep -q '/etc/init.d/ruijie start' "$SETUP_FILE"; then
+    pass "OpenWrt 通过 init.d 启动服务"
 else
-    fail "未找到 ruijie.sh --daemon 守护进程入口"
+    fail "未找到 init.d 服务入口"
 fi
 
 if grep -q '\*/5 \* \* \* \* test -f /var/run/ruijie-daemon.pid' "$SETUP_FILE"; then
-    pass "OpenWrt cron 已改为全天 watchdog"
+    fail "cron 看门狗会破坏停止语义，不能重新引入"
 else
-    fail "OpenWrt cron 仍不是全天 watchdog"
+    pass "不再安装全天 cron 看门狗"
 fi
 
 if grep -q '\*/5 5-7 \* \* \* \$INSTALL_TARGET/ruijie\.sh >> /var/log/ruijie-login\.log 2>&1' "$SETUP_FILE"; then

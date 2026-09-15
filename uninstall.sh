@@ -88,19 +88,15 @@ echo "  守护进程已停止"
 # ========================================
 echo "[2/6] 禁用服务..."
 # OpenWrt init.d
-for _svc in "$INIT_SCRIPT"; do
-    [ -f "$_svc" ] && "$_svc" disable 2>/dev/null || true
-    [ -f "$_svc" ] && rm -f "$_svc" && echo "  已移除 $_svc"
-done
+[ -f "$INIT_SCRIPT" ] && "$INIT_SCRIPT" disable 2>/dev/null || true
+[ -f "$INIT_SCRIPT" ] && rm -f "$INIT_SCRIPT" && echo "  已移除 $INIT_SCRIPT"
 
 # ========================================
 # 移除脚本文件
 # ========================================
 echo "[3/6] 移除脚本文件..."
 # OpenWrt
-for _dir in "$OPENWRT_SCRIPT_DIR"; do
-    [ -d "$_dir" ] && rm -rf "$_dir" && echo "  已移除 $_dir"
-done
+[ -d "$OPENWRT_SCRIPT_DIR" ] && rm -rf "$OPENWRT_SCRIPT_DIR" && echo "  已移除 $OPENWRT_SCRIPT_DIR"
 
 # ========================================
 # 移除配置文件（--purge 时）

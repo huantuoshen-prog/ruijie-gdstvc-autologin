@@ -52,4 +52,5 @@ jobs:
         run: bash tests/run_tests.sh integration
 
       - name: Configuration release regressions
+        if: ${{ !cancelled() }}
         run: bash tests/test_release_config.sh
