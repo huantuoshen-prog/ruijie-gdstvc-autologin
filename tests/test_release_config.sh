@@ -1,6 +1,7 @@
 #!/bin/bash
 # Isolated configuration regression: no network/auth/service operations.
-set -eu
+set -euE
+trap 'printf "configuration regression failed at line %s\n" "$LINENO" >&2' ERR
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 for tool in jq flock; do command -v "$tool" >/dev/null || exit 77; done
 scratch="$(mktemp -d)"

@@ -72,7 +72,7 @@ config_set() {
     local payload expected username password operator proxy proxy_https account_type revision
     payload="$(cat)"
     jq -e . >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'invalid JSON'; return 2; }
-    jq -e '[.username,.password,.operator,.proxy_url,.proxy_url_https,.account_type] | all(.[]?; type == "string" and (test("[\\u0000\\r\\n]") | not))' >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'values cannot contain unsupported control characters'; return 2; }
+    jq -e '[.username,.password,.operator,.proxy_url,.proxy_url_https,.account_type] | all(.[]; type == "string" and (explode | all(.[]; . >= 32 and . != 127)))' >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'values cannot contain unsupported control characters'; return 2; }
     jq -e '.revision | type == "string" and length > 0' >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'revision is required'; return 2; }
     expected="$(jq -r '.revision' <<<"$payload")"
     revision="$(config_revision)"
