@@ -58,18 +58,22 @@ parse_args() {
                 shift
                 ;;
             -u|--username)
+                [ $# -ge 2 ] || { log_error "$1 需要用户名"; return 2; }
                 USERNAME="$2"
                 shift 2
                 ;;
             -p|--password)
+                [ $# -ge 2 ] || { log_error "$1 需要密码"; return 2; }
                 PASSWORD="$2"
                 shift 2
                 ;;
             --proxy)
+                [ $# -ge 2 ] || { log_error "$1 需要代理地址"; return 2; }
                 PROXY_URL="$2"
                 shift 2
                 ;;
             --operator)
+                [ $# -ge 2 ] || { log_error "$1 需要运营商"; return 2; }
                 OPERATOR="$2"
                 shift 2
                 ;;
@@ -107,6 +111,7 @@ parse_args() {
                 shift
                 ;;
             --health-enable)
+                [ $# -ge 2 ] || { log_error "$1 需要时长"; return 2; }
                 ACTION="health-enable"
                 HEALTH_DURATION="$2"
                 shift 2
@@ -128,6 +133,7 @@ parse_args() {
                 shift
                 ;;
             --lines)
+                [ $# -ge 2 ] || { log_error "$1 需要行数"; return 2; }
                 HEALTH_LOG_LINES="$2"
                 shift 2
                 ;;
@@ -232,8 +238,11 @@ main() {
     # 守护进程状态/停止
     case "$ACTION" in
         stop)
-            daemon_stop
-            exit 0
+            if [ -x "${SCRIPT_DIR}/ruijiectl" ]; then
+                exec "${SCRIPT_DIR}/ruijiectl" service stop
+            fi
+            log_error "ruijiectl 不存在，无法通过 procd 停止服务"
+            exit 1
             ;;
         status)
             if [ "$OUTPUT_JSON" = "true" ]; then
@@ -320,8 +329,11 @@ main() {
     fi
 
     if [ "$DAEMON_MODE" = "true" ]; then
-        daemon_start
-        exit $?
+        if [ -x "${SCRIPT_DIR}/ruijiectl" ]; then
+            exec "${SCRIPT_DIR}/ruijiectl" service start
+        fi
+        log_error "ruijiectl 不存在，无法通过 procd 启动服务"
+        exit 1
     fi
 
     # 正常登录流程
@@ -367,5 +379,5 @@ main() {
 
 # 启动
 _detect_mode
-parse_args "$@"
+parse_args "$@" || exit $?
 main

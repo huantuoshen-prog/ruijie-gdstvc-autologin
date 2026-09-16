@@ -1,58 +1,26 @@
-# 开发者文档
+# 开发说明
 
-## 项目结构
+核心运行入口是 `ruijiectl`。它是认证、配置、服务、健康与日志的唯一业务边界；CGI 不应 source `lib/`。
 
 ```text
-ruijie-gdstvc-autologin/
-├── ruijie.sh
-├── ruijie_student.sh
-├── ruijie_teacher.sh
-├── setup.sh
-├── uninstall.sh
-├── lib/
-│   ├── common.sh
-│   ├── config.sh
-│   ├── network.sh
-│   ├── daemon.sh
-│   └── health.sh
-├── systemd/
-│   └── ruijie.service
-├── tests/
-└── docs/
+ruijiectl config get|set
+ruijiectl service start|stop|restart|enable|disable
+ruijiectl auth ensure|reauth|logout
+ruijiectl status|runtime|health|logs
 ```
 
-## 模块说明
+所有新接口使用 schema `2`，返回 `success`、`code`、`message`、`data`。配置读取返回 revision，写入必须携带它；写入通过同目录临时文件、`flock` 和原子替换完成。
 
-| 模块 | 说明 |
-|------|------|
-| `lib/common.sh` | 颜色、日志、通用常量 |
-| `lib/config.sh` | 配置读写 |
-| `lib/network.sh` | portal 参数解析、认证请求、联网检测 |
-| `lib/daemon.sh` | daemon 状态机、锁、状态展示 |
-| `lib/health.sh` | 健康监听、运行环境、JSON CLI |
+运行本地 shell 测试：
 
-## 测试
-
-```bash
-# 所有测试
-bash tests/run_tests.sh all
-
-# 仅单元测试
-bash tests/run_tests.sh unit
-
-# 仅集成测试
-bash tests/run_tests.sh integration
+```sh
+bash tests/run_tests.sh
 ```
 
-## 添加新运营商
+构建固定发布包：
 
-1. 修改 `lib/network.sh` 中的服务类型映射
-2. 修改 `setup.sh` 的交互式选择
-3. 更新 `docs/cli-and-config.md` 中的参数说明
-4. 补充测试
+```sh
+sh release.sh
+```
 
-## 文档维护规则
-
-- README 只保留首页导航与高频入口
-- 详细命令、配置、原理、FAQ 和开发说明写入 `docs/`
-- 面向 Agent 的排障模板统一保存在 `docs/AGENT_DEBUG_PROMPT.md`
+发布验证应在至少一个旧版和一个新版 OpenWrt 环境中运行完整包安装、依赖缺失、校验失败和回滚测试。开发机的 Bash 测试不能替代 BusyBox/uhttpd 集成测试。

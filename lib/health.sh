@@ -244,16 +244,8 @@ health_detect_curl() {
     command -v curl >/dev/null 2>&1 && echo "true" || echo "false"
 }
 
-health_detect_nohup_backend() {
-    if command -v nohup >/dev/null 2>&1; then
-        echo "nohup"
-    elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qw "nohup"; then
-        echo "busybox-nohup"
-    elif command -v setsid >/dev/null 2>&1; then
-        echo "setsid"
-    else
-        echo "missing"
-    fi
+health_detect_procd() {
+    [ -x /sbin/procd ] || command -v procd >/dev/null 2>&1
 }
 
 health_detect_panel_installed() {
@@ -309,7 +301,8 @@ health_runtime_json() {
     _shell="$(health_detect_shell)"
     _busybox="$(health_detect_busybox)"
     _curl="$(health_detect_curl)"
-    _nohup_backend="$(health_detect_nohup_backend)"
+    _procd="false"
+    health_detect_procd && _procd="true"
     if [ -n "${SCRIPT_DIR:-}" ]; then
         _script_dir="$SCRIPT_DIR"
     else
@@ -328,7 +321,7 @@ health_runtime_json() {
     printf '"shell":"%s",' "$(health_json_escape "$_shell")"
     printf '"busybox_present":%s,' "$(health_json_boolean "$_busybox")"
     printf '"curl_present":%s,' "$(health_json_boolean "$_curl")"
-    printf '"nohup_backend":"%s",' "$(health_json_escape "$_nohup_backend")"
+    printf '"procd_present":%s,' "$(health_json_boolean "$_procd")"
     printf '"script_dir":"%s",' "$(health_json_escape "$_script_dir")"
     printf '"config_file":"%s",' "$(health_json_escape "$CONFIG_FILE")"
     printf '"daemon_pidfile":"%s",' "$(health_json_escape "${PIDFILE:-/var/run/ruijie-daemon.pid}")"
@@ -347,9 +340,14 @@ health_snapshot_json() {
         load_config 2>/dev/null || true
     fi
 
-    _online="false"
+    _online="null"
+    _connectivity="unknown"
     if command -v check_network >/dev/null 2>&1 && check_network >/dev/null 2>&1; then
         _online="true"
+        _connectivity="online"
+    elif [ "${NETWORK_CHECK_RESULT:-unknown}" = "offline" ]; then
+        _online="false"
+        _connectivity="offline"
     fi
 
     _daemon_running="$(health_daemon_running)"
@@ -359,7 +357,8 @@ health_snapshot_json() {
     fi
 
     printf '{'
-    printf '"online":%s,' "$(health_json_boolean "$_online")"
+    printf '"online":%s,' "$_online"
+    printf '"connectivity":"%s",' "$_connectivity"
     printf '"daemon_running":%s,' "$(health_json_boolean "$_daemon_running")"
     printf '"daemon_state":"%s",' "$(health_json_escape "$(cat /var/run/ruijie-daemon.state 2>/dev/null || echo "")")"
     printf '"daemon_pid":"%s",' "$(health_json_escape "$_daemon_pid")"
@@ -372,7 +371,13 @@ health_snapshot_json() {
 health_write_runtime_snapshot() {
     health_apply_defaults
     mkdir -p "$(dirname "$RUNTIME_STATUS_FILE")" 2>/dev/null || true
-    health_runtime_json | cat > "$RUNTIME_STATUS_FILE" 2>/dev/null || true
+    _runtime_tmp="${RUNTIME_STATUS_FILE}.tmp.$$"
+    if health_runtime_json > "$_runtime_tmp" 2>/dev/null; then
+        chmod 600 "$_runtime_tmp" 2>/dev/null || true
+        mv -f "$_runtime_tmp" "$RUNTIME_STATUS_FILE" 2>/dev/null || rm -f "$_runtime_tmp"
+    else
+        rm -f "$_runtime_tmp"
+    fi
 }
 
 health_write_status_snapshot() {
@@ -388,7 +393,8 @@ health_write_status_snapshot() {
         _last_event_at="$(tail -n 1 "$HEALTH_LOGFILE" 2>/dev/null | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
     fi
 
-    {
+    _status_tmp="${HEALTH_STATUS_FILE}.tmp.$$"
+    if {
         printf '{'
         printf '"supported":true,'
         printf '"enabled":%s,' "$(health_json_boolean "${HEALTH_MONITOR_ENABLED:-false}")"
@@ -402,7 +408,12 @@ health_write_status_snapshot() {
         printf '"runtime":%s,' "$_runtime_json"
         printf '"snapshot":%s' "$_snapshot_json"
         printf '}'
-    } | cat > "$HEALTH_STATUS_FILE" 2>/dev/null || true
+    } > "$_status_tmp" 2>/dev/null; then
+        chmod 600 "$_status_tmp" 2>/dev/null || true
+        mv -f "$_status_tmp" "$HEALTH_STATUS_FILE" 2>/dev/null || rm -f "$_status_tmp"
+    else
+        rm -f "$_status_tmp"
+    fi
 }
 
 health_rotate_log_if_needed() {

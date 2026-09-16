@@ -5,8 +5,9 @@
 # ========================================
 
 # 版本信息
-RUIJIE_VERSION="3.1"
-RUIJIE_BUILD_DATE="2026-04-07"
+RUIJIE_VERSION="4.0.0"
+RUIJIE_BUILD_DATE="2026-09-13"
+RUIJIE_API_SCHEMA_VERSION="2"
 
 # 退出码常量
 EXIT_NETWORK_UNREACHABLE=10
@@ -28,29 +29,30 @@ export COLOR_NC='\033[0m'
 
 # 日志函数
 log_info() {
-    echo -e "${COLOR_BLUE}[INFO]${COLOR_NC} $1"
+    printf '%b\n' "${COLOR_BLUE}[INFO]${COLOR_NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${COLOR_GREEN}[OK]${COLOR_NC} $1"
+    printf '%b\n' "${COLOR_GREEN}[OK]${COLOR_NC} $1" >&2
 }
 
 log_warning() {
-    echo -e "${COLOR_YELLOW}[WARN]${COLOR_NC} $1"
+    printf '%b\n' "${COLOR_YELLOW}[WARN]${COLOR_NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${COLOR_RED}[ERROR]${COLOR_NC} $1"
+    printf '%b\n' "${COLOR_RED}[ERROR]${COLOR_NC} $1" >&2
 }
 
 log_step() {
-    echo -e "${COLOR_CYAN}[STEP]${COLOR_NC} $1"
+    printf '%b\n' "${COLOR_CYAN}[STEP]${COLOR_NC} $1" >&2
 }
 
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # 默认配置路径
-CONFIG_DIR="${CONFIG_DIR:-${HOME}/.config/ruijie}"
+RUIJIE_CONFIG_HOME="${RUIJIE_CONFIG_HOME:-${HOME:-/root}/.config/ruijie}"
+CONFIG_DIR="${CONFIG_DIR:-$RUIJIE_CONFIG_HOME}"
 CONFIG_FILE="${CONFIG_FILE:-${CONFIG_DIR}/ruijie.conf}"
 PIDFILE="${PIDFILE:-/var/run/ruijie-daemon.pid}"
 LOGFILE="${LOGFILE:-/var/log/ruijie-daemon.log}"

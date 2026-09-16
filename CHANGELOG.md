@@ -1,21 +1,27 @@
 # Changelog - Ruijie-Auto-Login
 
-## Unreleased
+## v4.0.0 (2026-09-16)
 
 ### Added
 - 新增运行环境感知的健康监听与健康日志
 - 新增 `--json`、`--health-status`、`--health-enable`、`--health-disable`、`--health-log`、`--runtime-status`
 - 新增面向通用 Agent 的 [调试 Prompt 文档](./docs/AGENT_DEBUG_PROMPT.md)
 - 新增状态展示辅助函数回归测试
+- 新增统一非交互入口 `ruijiectl`、schema 2 JSON 契约、配置 revision 和操作互斥
+- 新增固定版本发布包、逐文件校验、原子升级与手动回滚
+- 新增 OpenWrt 19.07.10、24.10.8 安装与回滚测试
 
 ### Changed
 - README 调整为首页导航，详细文档拆分到 `docs/`
 - 新增 `docs/install.md`、`docs/cli-and-config.md`、`docs/daemon-and-health.md`、`docs/troubleshooting.md`、`docs/development.md`
 - `status` 输出在 BusyBox / OpenWrt 下支持 `/proc` 运行时间回退
+- 服务统一交给 procd；停止自动重连、禁用开机启动和主动下线分别控制
+- 项目仅支持 OpenWrt、iStoreOS、ImmortalWrt 等 OpenWrt 系固件
 
 ### Fixed
 - 修复 `last_auth` 时间字符串丢失日期与时间之间空格的问题
 - 修复 BusyBox `ps` 不支持 `etime` 时 `daemon_uptime` 为空的问题
+- 修复特殊字符表单编码、离线 JSON、缺参数循环、超时不释放锁和配置写入误报成功
 
 ## v3.1 (2026-04-07)
 

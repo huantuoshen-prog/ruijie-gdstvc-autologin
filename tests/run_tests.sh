@@ -61,7 +61,7 @@ run_unit_tests() {
     echo "========== 单元测试 =========="
 
     # 测试颜色函数
-    _output=$(. "${PROJECT_DIR}/lib/common.sh"; log_info "test")
+    _output=$(. "${PROJECT_DIR}/lib/common.sh"; log_info "test" 2>&1)
     assert_contains "$_output" "[INFO]"
 
     # 测试常量定义
@@ -77,16 +77,16 @@ run_unit_tests() {
     assert_file_exists "$CONFIG_FILE"
 
     # 测试日志函数输出
-    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_success "ok")
+    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_success "ok" 2>&1)
     assert_contains "$_out" "[OK]"
 
-    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_warning "warn")
+    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_warning "warn" 2>&1)
     assert_contains "$_out" "[WARN]"
 
-    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_error "err")
+    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_error "err" 2>&1)
     assert_contains "$_out" "[ERROR]"
 
-    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_step "step")
+    _out=$(. "${PROJECT_DIR}/lib/common.sh"; log_step "step" 2>&1)
     assert_contains "$_out" "[STEP]"
 
     # 测试帮助信息
@@ -144,14 +144,14 @@ run_integration_tests() {
     if [ -L "${PROJECT_DIR}/ruijie_student.sh" ]; then
         pass "ruijie_student.sh 是符号链接"
     elif [ -f "${PROJECT_DIR}/ruijie_student.sh" ]; then
-        pass "ruijie_student.sh 存在 (Windows兼容模式)"
+        pass "ruijie_student.sh 包装入口存在"
     else
         fail "ruijie_student.sh 不存在"
     fi
     if [ -L "${PROJECT_DIR}/ruijie_teacher.sh" ]; then
         pass "ruijie_teacher.sh 是符号链接"
     elif [ -f "${PROJECT_DIR}/ruijie_teacher.sh" ]; then
-        pass "ruijie_teacher.sh 存在 (Windows兼容模式)"
+        pass "ruijie_teacher.sh 包装入口存在"
     else
         fail "ruijie_teacher.sh 不存在"
     fi
@@ -161,11 +161,11 @@ run_integration_tests() {
         _target=$(readlink "${PROJECT_DIR}/ruijie_student.sh")
         [ "$_target" = "ruijie.sh" ] && pass "符号链接指向正确" || fail "符号链接指向: $_target"
     else
-        pass "符号链接测试跳过 (Windows兼容模式)"
+        pass "包装脚本模式无需符号链接检查"
     fi
 
-    # 测试8: systemd文件存在
-    [ -f "${PROJECT_DIR}/systemd/ruijie.service" ] && pass "systemd service文件存在" || fail "systemd service文件不存在"
+    # 测试8: OpenWrt procd 服务存在
+    [ -f "${PROJECT_DIR}/init.d/ruijie" ] && pass "OpenWrt procd 服务文件存在" || fail "OpenWrt procd 服务文件不存在"
 
     # 测试9: CI workflow存在
     [ -f "${PROJECT_DIR}/.github/workflows/ci.yml" ] && pass "CI workflow存在" || fail "CI workflow不存在"

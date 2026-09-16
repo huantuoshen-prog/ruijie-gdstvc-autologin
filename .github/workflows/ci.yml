@@ -7,6 +7,40 @@ on:
     branches: [main]
 
 jobs:
+  openwrt-release:
+    name: OpenWrt ${{ matrix.release }} install and rollback
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - release: 19.07.10
+            rootfs_url: https://downloads.openwrt.org/releases/19.07.10/targets/x86/64/openwrt-19.07.10-x86-64-generic-rootfs.tar.gz
+            rootfs_sha256: 12e7747f48d607eb782240c5c8c5fff6409d19f8fa853786e9642c86adb26287
+          - release: 24.10.8
+            rootfs_url: https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/openwrt-24.10.8-x86-64-rootfs.tar.gz
+            rootfs_sha256: 6c94190246a54088e3984fc0c4cbbb518972abb2b10a28e30a0c41554eea8b9d
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build fixed core archive
+        run: BUILD_TIME=2026-09-16T00:00:00Z sh release.sh
+      - name: Import verified official OpenWrt rootfs
+        env:
+          ROOTFS_URL: ${{ matrix.rootfs_url }}
+          ROOTFS_SHA256: ${{ matrix.rootfs_sha256 }}
+        run: |
+          curl -fsSL "$ROOTFS_URL" -o "$RUNNER_TEMP/openwrt-rootfs.tar.gz"
+          printf '%s  %s\n' "$ROOTFS_SHA256" "$RUNNER_TEMP/openwrt-rootfs.tar.gz" | sha256sum -c -
+          docker import "$RUNNER_TEMP/openwrt-rootfs.tar.gz" "ruijie-openwrt:${{ matrix.release }}"
+      - name: Exercise install, failures and rollback inside OpenWrt
+        run: |
+          docker run --rm --privileged -v "$PWD:/workspace:ro" "ruijie-openwrt:${{ matrix.release }}" /bin/ash -ec '
+            mkdir -p /var/lock
+            opkg update
+            opkg install bash curl jq flock
+            /bin/ash /workspace/tests/test_openwrt_release.sh /workspace/dist/ruijie-core-4.0.0.tar.gz
+          '
+
   shellcheck:
     name: ShellCheck Lint
     runs-on: ubuntu-latest
@@ -36,14 +70,25 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x ruijie.sh lib/*.sh tests/*.sh
+          chmod +x ruijie.sh ruijiectl install.sh rollback.sh release.sh init.d/ruijie lib/*.sh tests/*.sh
           # 创建符号链接（向后兼容）
           rm -f ruijie_student.sh ruijie_teacher.sh
           ln -s ruijie.sh ruijie_student.sh
           ln -s ruijie.sh ruijie_teacher.sh
 
       - name: Unit tests (含扩展单元测试)
-        run: bash tests/run_tests.sh unit
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          bash tests/run_tests.sh unit
 
       - name: Integration tests
         run: bash tests/run_tests.sh integration
+
+      - name: Configuration release regressions
+        if: ${{ !cancelled() }}
+        run: bash tests/test_release_config.sh
+
+      - name: Connectivity state regressions
+        if: ${{ !cancelled() }}
+        run: bash tests/test_status_connectivity.sh

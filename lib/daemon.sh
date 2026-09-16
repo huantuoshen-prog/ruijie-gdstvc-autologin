@@ -5,7 +5,6 @@
 # ========================================
 
 # 锁文件路径（用于防止多实例启动）
-_LOCKFILE="${LOCKFILE:-/var/run/ruijie-daemon.lock}"
 
 # ========================================
 # 状态查询函数
@@ -191,36 +190,6 @@ daemon_status() {
     fi
 }
 
-# 停止守护进程
-daemon_stop() {
-    if daemon_is_running; then
-        _pid=$(cat "$PIDFILE")
-        log_info "正在停止守护进程 (PID $_pid)..."
-        _daemon_health_event "INFO" "daemon" "守护进程停止请求" "{\"pid\":\"${_pid}\"}"
-        kill -TERM "$_pid" 2>/dev/null
-
-        # 等待进程退出
-        _count=0
-        while kill -0 "$_pid" 2>/dev/null && [ "$_count" -lt 10 ]; do
-            sleep 1
-            _count=$((_count + 1))
-        done
-
-        if kill -0 "$_pid" 2>/dev/null; then
-            kill -KILL "$_pid" 2>/dev/null
-        fi
-
-        rm -f "$PIDFILE"
-        > "$_LOCKFILE" 2>/dev/null || true
-        # 清理状态文件
-        rm -f "/var/run/ruijie-daemon.state" "/var/run/ruijie-daemon.backoff" 2>/dev/null || true
-        _daemon_health_refresh_snapshots
-        log_success "守护进程已停止"
-    else
-        log_warning "守护进程未运行，无需停止"
-    fi
-}
-
 # ========================================
 # 状态机驱动守护进程
 # ========================================
@@ -262,7 +231,20 @@ _write_daemon_state() {
 }
 
 # 记录带时间戳的日志（避免多进程写入混乱）
+_rotate_daemon_log_if_needed() {
+    _max_bytes="${DAEMON_LOG_ROTATE_BYTES:-1048576}"
+    [ -f "$LOGFILE" ] || return 0
+    _log_size="$(wc -c < "$LOGFILE" 2>/dev/null | tr -d '[:space:]')"
+    case "$_log_size" in ''|*[!0-9]*) return 0;; esac
+    [ "$_log_size" -lt "$_max_bytes" ] 2>/dev/null && return 0
+    [ -f "${LOGFILE}.1" ] && mv -f "${LOGFILE}.1" "${LOGFILE}.2" 2>/dev/null || true
+    mv -f "$LOGFILE" "${LOGFILE}.1" 2>/dev/null || true
+    : > "$LOGFILE" 2>/dev/null || true
+    chmod 600 "$LOGFILE" 2>/dev/null || true
+}
+
 _log_daemon() {
+    _rotate_daemon_log_if_needed
     _ts=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$_ts] $1" >> "$LOGFILE" 2>/dev/null || true
 }
@@ -325,18 +307,26 @@ _daemon_health_collect_baseline_if_due() {
 # 守护进程内统一认证入口
 _daemon_login() {
     do_login "$USERNAME" "$PASSWORD" "$ACCOUNT_TYPE" >> "$LOGFILE" 2>&1
+    _login_result=$?
+    _rotate_daemon_log_if_needed
+    return "$_login_result"
 }
 
 # 状态机守护进程主循环
 daemon_loop() {
     _state="ONLINE"
 
-    # nohup 子进程需自行加载配置
+    # procd starts a fresh foreground process, so load its configuration here.
     if ! is_configured; then
-        _log_daemon "未检测到配置，请先运行 setup.sh"
+        _log_daemon "未检测到配置，请先通过 ruijiectl config set 保存配置"
         return 1
     fi
     load_config
+
+    # procd runs this loop in the foreground.  Publish its PID so status does
+    # not infer process state from command-name matching.
+    mkdir -p "$(dirname "$PIDFILE")" 2>/dev/null || true
+    printf '%s' "$$" > "$PIDFILE" 2>/dev/null || true
 
     # 信号处理：清理所有资源
     _daemon_cleanup() {
@@ -378,11 +368,18 @@ daemon_loop() {
                     fi
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
+                    _network_result=$?
                     _online_check_count=0
-                    _log_daemon "[ONLINE] 在线检测失败，进入重试"
-                    _daemon_health_event "WARN" "network_error" "在线检测失败，进入重试" "{}"
-                    _state="CHECKING"
-                    _interval=0  # 立即检查
+                    if [ "$_network_result" -eq 2 ] || [ "${NETWORK_CHECK_RESULT:-unknown}" = unknown ]; then
+                        _log_daemon "[ONLINE] 连通性暂时无法确认，${_DAEMON_INTERVAL_SHORT}s后复查"
+                        _daemon_health_event "WARN" "network_unknown" "连通性暂时无法确认，稍后复查" "{\"next_check_seconds\":\"${_DAEMON_INTERVAL_SHORT}\"}"
+                        _interval=$_DAEMON_INTERVAL_SHORT
+                    else
+                        _log_daemon "[ONLINE] 已确认离线，进入重试"
+                        _daemon_health_event "WARN" "network_error" "已确认离线，进入重试" "{}"
+                        _state="CHECKING"
+                        _interval=0  # 立即检查
+                    fi
                 fi
                 ;;
 
@@ -449,107 +446,4 @@ daemon_loop() {
         fi
         [ "$_interval" -gt 0 ] && sleep "$_interval"
     done
-}
-
-# 后台启动守护进程
-# 优先使用 nohup (coreutils)，依次回退到 busybox nohup、setsid
-_daemon_get_bg_cmd() {
-    if command -v nohup >/dev/null 2>&1; then
-        echo "nohup"
-    elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qw "nohup"; then
-        echo "busybox nohup"
-    elif command -v setsid >/dev/null 2>&1; then
-        echo "setsid"
-    else
-        echo ""
-    fi
-}
-
-_daemon_entry_script() {
-    _default_entry="${SCRIPT_DIR:-.}/ruijie.sh"
-    if [ -f "$_default_entry" ]; then
-        echo "$_default_entry"
-    else
-        echo "${SCRIPT_DIR:-.}/$(basename "$0")"
-    fi
-}
-
-daemon_start() {
-    # 尝试获取锁，防止多实例启动
-    exec 200>"$_LOCKFILE"
-    if ! flock -n 200; then
-        _old_pid=""
-        [ -f "$PIDFILE" ] && _old_pid=$(cat "$PIDFILE" 2>/dev/null)
-        log_error "守护进程已在运行 (PID ${_old_pid:-未知})，请勿重复启动"
-        return 1
-    fi
-
-    if daemon_is_running; then
-        _pid=$(cat "$PIDFILE")
-        log_warning "守护进程已在运行 (PID $_pid)"
-        flock -n 200 && exec 200>&- || true; return 1
-    fi
-
-    # 确保有配置
-    if ! is_configured; then
-        log_error "未检测到配置，请先运行 '$0 --setup' 进行配置"
-        flock -n 200 && exec 200>&- || true; return 1
-    fi
-
-    # 加载配置
-    load_config
-
-    # 检测后台运行方式
-    _bg_cmd=$(_daemon_get_bg_cmd)
-    if [ -z "$_bg_cmd" ]; then
-        log_error "缺少后台运行工具 (nohup/setsid)"
-        echo ""
-        echo "  推荐安装 coreutils-nohup:"
-        echo "    opkg update && opkg install coreutils-nohup"
-        echo ""
-        echo "  若 opkg 源失效，可手动从备用源下载:"
-        echo "    wget https://downloads.openwrt.org/releases/19.07.10/packages/aarch64_cortex-a53/base/coreutils-nohup_9.1-1_aarch64_cortex-a53.ipk -O /tmp/nohup.ipk"
-        echo "    opkg install /tmp/nohup.ipk"
-        echo ""
-        echo "  或使用 BusyBox 内置 nohup:"
-        echo "    opkg install busybox && busybox --install"
-        exec 200>&- || true
-        return 1
-    fi
-
-    # 创建日志目录
-    _logdir="$(dirname "$LOGFILE")"
-    mkdir -p "$_logdir" 2>/dev/null || log_warning "无法创建日志目录 $LOGFILE，日志可能写入失败"
-    _daemon_entry="$(_daemon_entry_script)"
-
-    # 后台启动
-    case "$_bg_cmd" in
-        "nohup")
-            nohup "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
-            ;;
-        "busybox nohup")
-            busybox nohup "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
-            ;;
-        "setsid")
-            setsid "$_daemon_entry" --daemon-loop >> "$LOGFILE" 2>&1 &
-            ;;
-    esac
-    _pid=$!
-    echo "$_pid" > "$PIDFILE"
-
-    # 确保进程真正启动
-    sleep 1
-    if kill -0 "$_pid" 2>/dev/null; then
-        _daemon_health_event "INFO" "daemon" "守护进程已启动" "{\"pid\":\"${_pid}\",\"backend\":\"${_bg_cmd}\"}"
-        _daemon_health_refresh_snapshots
-        log_success "守护进程已启动 (PID $_pid, 后台工具: $_bg_cmd)"
-        log_info "日志文件: $LOGFILE"
-        flock -n 200 && exec 200>&- || true
-        return 0
-    else
-        rm -f "$PIDFILE"
-        log_error "守护进程启动失败（后台工具: $_bg_cmd）"
-        exec 200>&- || true
-        return 1
-    fi
 }

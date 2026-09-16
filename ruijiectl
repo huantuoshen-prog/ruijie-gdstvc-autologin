@@ -1,0 +1,170 @@
+#!/bin/bash
+set -u
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/lib/common.sh"
+. "$SCRIPT_DIR/lib/config.sh"
+. "$SCRIPT_DIR/lib/network.sh"
+. "$SCRIPT_DIR/lib/daemon.sh"
+. "$SCRIPT_DIR/lib/health.sh"
+
+json_response() {
+    local success="$1" code="$2" message="$3" data="${4-}"
+    [ -n "$data" ] || data='{}'
+    jq -cn --argjson success "$success" --arg code "$code" --arg message "$message" \
+        --argjson data "$data" --argjson schema "$RUIJIE_API_SCHEMA_VERSION" \
+        '{schema_version:$schema,success:$success,code:$code,message:$message,data:$data}'
+}
+
+require_openwrt() {
+    [ -f /etc/openwrt_release ] || command -v ubus >/dev/null 2>&1
+}
+
+require_dependencies() {
+    local missing=() x
+    for x in bash curl jq flock sha256sum; do command -v "$x" >/dev/null 2>&1 || missing+=("$x"); done
+    [ "${#missing[@]}" -eq 0 ] || { printf 'missing dependencies: %s\n' "${missing[*]}" >&2; return 1; }
+}
+
+with_operation_lock() {
+    local lock="/var/lock/ruijie.operation.lock"
+    mkdir -p "$(dirname "$lock")" 2>/dev/null || return 1
+    exec 8>"$lock" || return 1
+    flock -n 8 || { json_response false BUSY 'another operation is running'; return 3; }
+    "$@"; local result=$?
+    flock -u 8 2>/dev/null || true
+    exec 8>&-
+    return "$result"
+}
+
+status_json() {
+    local online=null connectivity=unknown desired=false process=false last_auth='' now pid='' state='' uptime=''
+    load_config 2>/dev/null || true
+    if check_network; then
+        online=true
+        connectivity=online
+    elif [ "${NETWORK_CHECK_RESULT:-unknown}" = offline ]; then
+        online=false
+        connectivity=offline
+    fi
+    if [ -f /var/run/ruijie.desired ]; then
+        [ "$(cat /var/run/ruijie.desired 2>/dev/null)" = running ] && desired=true
+    elif [ -f /etc/init.d/ruijie ] && /etc/init.d/ruijie enabled >/dev/null 2>&1; then
+        desired=true
+    fi
+    if daemon_is_running 2>/dev/null; then
+        process=true
+        pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+        state="$(cat /var/run/ruijie-daemon.state 2>/dev/null || true)"
+        uptime="$(daemon_get_uptime "$pid" 2>/dev/null || true)"
+    fi
+    last_auth="$(get_last_auth_time 2>/dev/null || true)"
+    now="$(date +%s)"
+    jq -cn --argjson online "$online" --argjson desired "$desired" --argjson process "$process" \
+        --arg last_auth "$last_auth" --arg version "$RUIJIE_VERSION" --arg username "${USERNAME:-}" \
+        --arg operator "${OPERATOR:-DianXin}" --arg account_type "${ACCOUNT_TYPE:-student}" --arg pid "$pid" --arg state "$state" --arg uptime "$uptime" --argjson observed_at "$now" \
+        --arg connectivity "$connectivity" \
+        '{installed:true,online:$online,connectivity:$connectivity,desired_running:$desired,process_running:$process,daemon_running:$process,daemon_pid:$pid,daemon_state:$state,daemon_uptime:$uptime,last_auth:$last_auth,version:$version,username:$username,operator:$operator,account_type:$account_type,observed_at:$observed_at,state_age_seconds:0,stale:false}'
+}
+
+config_get() {
+    load_config
+    jq -cn --arg username "${USERNAME:-}" --arg operator "${OPERATOR:-DianXin}" \
+        --arg account_type "${ACCOUNT_TYPE:-student}" --arg proxy_url "${PROXY_URL:-}" \
+        --arg proxy_url_https "${PROXY_URL_HTTPS:-}" --arg revision "$(config_revision)" \
+        '{username:$username,operator:$operator,account_type:$account_type,proxy_url:$proxy_url,proxy_url_https:$proxy_url_https,revision:$revision}'
+}
+
+config_set() {
+    local payload expected username password operator proxy proxy_https account_type revision
+    payload="$(cat)"
+    jq -e . >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'invalid JSON'; return 2; }
+    jq -e '[.username,.password,.operator,.proxy_url,.proxy_url_https,.account_type] | all(.[]; type == "string" and (explode | all(.[]; . >= 32 and . != 127)))' >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'values cannot contain unsupported control characters'; return 2; }
+    jq -e '.revision | type == "string" and length > 0' >/dev/null 2>&1 <<<"$payload" || { json_response false INVALID_ARGUMENT 'revision is required'; return 2; }
+    expected="$(jq -r '.revision' <<<"$payload")"
+    revision="$(config_revision)"
+    [ -z "$expected" ] || [ "$expected" = "$revision" ] || { json_response false CONFLICT 'configuration has changed'; return 3; }
+    load_config
+    username="$(jq -r '.username // ""' <<<"$payload")"; password="$(jq -r '.password // ""' <<<"$payload")"
+    operator="$(jq -r '.operator // "DianXin"' <<<"$payload")"; proxy="$(jq -r '.proxy_url // ""' <<<"$payload")"
+    proxy_https="$(jq -r '.proxy_url_https // ""' <<<"$payload")"; account_type="$(jq -r '.account_type // "student"' <<<"$payload")"
+    if [ "$password" = "__PRESERVE__" ]; then
+        load_config
+        password="${PASSWORD:-}"
+    fi
+    [ -n "$username" ] && [ -n "$password" ] || { json_response false INVALID_ARGUMENT 'username and password are required'; return 2; }
+    case "$account_type:$operator" in student:DianXin|student:LianTong|teacher:default|teacher:DianXin|teacher:LianTong) ;; *) json_response false INVALID_ARGUMENT 'invalid operator'; return 2;; esac
+    case "$account_type" in student|teacher) ;; *) json_response false INVALID_ARGUMENT 'invalid account type'; return 2;; esac
+    local value
+    for value in "$username" "$password" "$account_type" "$operator" "$proxy" "$proxy_https"; do
+        config_validate_value "$value" || { json_response false INVALID_ARGUMENT 'values cannot contain line breaks'; return 2; }
+    done
+    config_write "$username" "$password" "$account_type" "$operator" "${DAEMON_INTERVAL:-300}" "$proxy" "$proxy_https" "${NO_PROXY_LIST:-}" "$expected"
+    _write_result=$?
+    [ "$_write_result" -ne 76 ] || { json_response false CONFLICT 'configuration has changed'; return 3; }
+    [ "$_write_result" -eq 0 ] || { [ "$_write_result" -eq 75 ] && { json_response false BUSY 'configuration is being updated'; return 3; }; json_response false INTERNAL 'configuration write failed'; return 1; }
+    json_response true OK 'configuration saved' "$(config_get)"
+}
+
+service_action() {
+    local action="$1"
+    case "$action" in
+        start|restart) printf '%s' running > /var/run/ruijie.desired; /etc/init.d/ruijie "$action" ;;
+        stop) printf '%s' stopped > /var/run/ruijie.desired; /etc/init.d/ruijie stop ;;
+        enable|disable) /etc/init.d/ruijie "$action" ;;
+        *) json_response false INVALID_ARGUMENT 'invalid service action'; return 2;;
+    esac
+    json_response true OK "service $action complete" "$(status_json)"
+}
+
+auth_action() {
+    local action="$1" mode=ensure
+    load_config
+    case "$action" in ensure) mode=ensure;; reauth) mode=reauth;; logout) do_logout "${USERNAME:-}"; json_response true OK 'logout requested'; return;; *) json_response false INVALID_ARGUMENT 'invalid auth action'; return 2;; esac
+    # Each network phase has a bounded curl timeout; the full path is below 60 seconds.
+    bash "$SCRIPT_DIR/ruijiectl" _auth-run "$mode" >&2 && json_response true OK 'authentication completed' "$(status_json)" || { json_response false AUTH_FAILED 'authentication failed or timed out' "$(status_json)"; return 1; }
+}
+
+health_action() {
+    local action="${1:-status}" duration="${2:-3d}" payload
+    case "$action" in
+        status) payload="$(health_status_json)" ;;
+        enable) health_enable "$duration" || { json_response false INVALID_ARGUMENT 'invalid health duration'; return 2; }; payload="$(health_status_json)" ;;
+        disable) health_disable; payload="$(health_status_json)" ;;
+        *) json_response false INVALID_ARGUMENT 'invalid health action'; return 2 ;;
+    esac
+    json_response true OK 'health status' "$payload"
+}
+
+logs_action() {
+    local source="${1:-daemon}" lines="${2:-100}" file
+    case "$lines" in ''|*[!0-9]*) lines=100;; esac
+    [ "$lines" -le 500 ] || lines=500
+    case "$source" in
+        health)
+            json_response true OK 'health logs' "$(health_log_json "$lines" "" "")"
+            return
+            ;;
+        daemon) file="${LOGFILE:-/var/log/ruijie-daemon.log}" ;;
+        *) json_response false INVALID_ARGUMENT 'invalid log source'; return 2 ;;
+    esac
+    local payload
+    payload="$(jq -Rn --arg source "$source" '[inputs | {ts:"",level:"INFO",msg:.}] | {source:$source,lines:.,total:length}' < <(tail -n "$lines" "$file" 2>/dev/null | sed $'s/\e\\[[0-9;]*m//g'))"
+    json_response true OK 'logs' "$payload"
+}
+
+case "${1:-}" in
+    status) require_dependencies && json_response true OK 'status' "$(status_json)" ;;
+    config) case "${2:-}" in get) require_dependencies && json_response true OK 'configuration' "$(config_get)";; set) require_dependencies && config_set;; *) json_response false INVALID_ARGUMENT 'use config get or config set'; esac ;;
+    service) require_openwrt && require_dependencies && with_operation_lock service_action "${2:-}" ;;
+    auth) require_dependencies && with_operation_lock auth_action "${2:-}" ;;
+    health) require_dependencies && health_action "${2:-status}" "${3:-3d}" ;;
+    logs) require_dependencies && logs_action "${2:-daemon}" "${3:-100}" ;;
+    _auth-run) load_config; do_login "${USERNAME:-}" "${PASSWORD:-}" "${ACCOUNT_TYPE:-student}" "${OPERATOR:-DianXin}" "${2:-ensure}" ;;
+    runtime) require_dependencies && {
+        _runtime_payload="$(health_runtime_json)"
+        json_response true OK 'runtime' "$(jq -c --arg version "$RUIJIE_VERSION" --arg build "$RUIJIE_BUILD_DATE" '. + {version:$version,build_date:$build,required_commands:["bash","curl","jq","flock","sha256sum"]}' <<<"$_runtime_payload")"
+    } ;;
+    daemon-run) require_openwrt && require_dependencies && daemon_loop ;;
+    *) printf 'usage: ruijiectl {status|runtime|config|service|auth|daemon-run}\n' >&2; exit 2;;
+esac

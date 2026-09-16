@@ -19,18 +19,18 @@ FAIL=0
 pass() { echo "${GREEN}[PASS]${NC} $1"; PASS=$((PASS + 1)); }
 fail() { echo "${RED}[FAIL]${NC} $1"; FAIL=$((FAIL + 1)); }
 
-echo "========== OpenWrt 安装脚本回归测试 =========="
+echo "========== 旧安装入口退役回归测试 =========="
 
-if grep -q 'ruijie\.sh --daemon >> /var/log/ruijie-daemon\.log 2>&1' "$SETUP_FILE"; then
-    pass "rc.local/cron 使用 ruijie.sh --daemon 作为守护进程入口"
+if grep -q 'setup.sh has been retired in v4.0.0' "$SETUP_FILE"; then
+    pass "旧入口明确指向 v4 固定发布包"
 else
-    fail "未找到 ruijie.sh --daemon 守护进程入口"
+    fail "旧入口缺少迁移说明"
 fi
 
 if grep -q '\*/5 \* \* \* \* test -f /var/run/ruijie-daemon.pid' "$SETUP_FILE"; then
-    pass "OpenWrt cron 已改为全天 watchdog"
+    fail "cron 看门狗会破坏停止语义，不能重新引入"
 else
-    fail "OpenWrt cron 仍不是全天 watchdog"
+    pass "不再安装全天 cron 看门狗"
 fi
 
 if grep -q '\*/5 5-7 \* \* \* \$INSTALL_TARGET/ruijie\.sh >> /var/log/ruijie-login\.log 2>&1' "$SETUP_FILE"; then
@@ -39,10 +39,10 @@ else
     pass "已移除旧的 5-7 点登录 cron"
 fi
 
-if grep -q 'OPENWRT_ACTIVE_DIR="/root/ruijie"\|cp -r /etc/ruijie /root/ruijie' "$SETUP_FILE"; then
-    fail "setup.sh 仍依赖 /root/ruijie 同步路径"
+if grep -q 'opkg\|systemctl\|crontab\|rc.local' "$SETUP_FILE"; then
+    fail "旧入口仍尝试修改系统或安装依赖"
 else
-    pass "setup.sh 不再依赖 /root/ruijie 同步路径"
+    pass "旧入口不修改系统、不自动认证"
 fi
 
 echo ""

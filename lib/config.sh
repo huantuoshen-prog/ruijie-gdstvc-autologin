@@ -21,8 +21,9 @@ _cfg_load() {
         case "$line" in
             \#*|"") continue ;;
         esac
-        key="$(echo "$line" | cut -d'=' -f1)"
-        value="$(echo "$line" | cut -d'=' -f2-)"
+        case "$line" in *=*) ;; *) continue ;; esac
+        key="${line%%=*}"
+        value="${line#*=}"
         case "$key" in
             USERNAME)      USERNAME="$value" ;;
             PASSWORD)      PASSWORD="$value" ;;
@@ -46,26 +47,64 @@ save_config() {
     _password="$2"
     _account_type="${3:-student}"
 
-    if [ -n "$CONFIG_DIR" ]; then
-        mkdir -p "$CONFIG_DIR"
+    config_validate_value "$_username" || return 1
+    config_validate_value "$_password" || return 1
+    config_validate_value "$_account_type" || return 1
+    config_validate_value "${OPERATOR:-DianXin}" || return 1
+    config_write "$_username" "$_password" "$_account_type" "${OPERATOR:-DianXin}" \
+        "${DAEMON_INTERVAL:-300}" "${PROXY_URL:-}" "${PROXY_URL_HTTPS:-}" \
+        "${NO_PROXY_LIST:-www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com}"
+}
+
+config_validate_value() {
+    case "$1" in
+        *$'\n'*|*$'\r'*) return 1 ;;
+    esac
+    return 0
+}
+
+config_revision() {
+    [ -f "$CONFIG_FILE" ] || { printf '0'; return 0; }
+    sha256sum "$CONFIG_FILE" 2>/dev/null | awk '{print $1}'
+}
+
+config_write() {
+    _username="$1"; _password="$2"; _account_type="$3"; _operator="$4"
+    _interval="$5"; _proxy="$6"; _proxy_https="$7"; _no_proxy="$8"
+    mkdir -p "$CONFIG_DIR" || return 1
+    _lock="${CONFIG_FILE}.lock"
+    exec 9>"$_lock" || return 1
+    flock -n -x 9 || { exec 9>&-; return 75; }
+    if [ "${9+x}" = x ] && [ "$9" != "$(config_revision)" ]; then
+        exec 9>&-
+        return 76
     fi
-    cat > "$CONFIG_FILE" << EOF
+    _tmp="$(mktemp "${CONFIG_FILE}.tmp.XXXXXX")" || { exec 9>&-; return 1; }
+    umask 077
+    if ! cat > "$_tmp" << EOF
 # Ruijie Auto-Login Configuration
 # Generated $(date '+%Y-%m-%d %H:%M:%S')
-USERNAME=$_username
-PASSWORD=$_password
-ACCOUNT_TYPE=$_account_type
-OPERATOR=${OPERATOR:-DianXin}
-DAEMON_INTERVAL=${DAEMON_INTERVAL:-300}
+USERNAME=${_username}
+PASSWORD=${_password}
+ACCOUNT_TYPE=${_account_type}
+OPERATOR=${_operator}
+DAEMON_INTERVAL=${_interval}
 
 # --- Proxy Settings ---
 # HTTP proxy, empty = no proxy (default)
-PROXY_URL=${PROXY_URL:-}
-PROXY_URL_HTTPS=${PROXY_URL_HTTPS:-}
+PROXY_URL=${_proxy}
+PROXY_URL_HTTPS=${_proxy_https}
 # Bypass proxy for these targets (comma-separated)
-NO_PROXY_LIST=${NO_PROXY_LIST:-www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com}
+NO_PROXY_LIST=${_no_proxy}
 EOF
-    chmod 600 "$CONFIG_FILE"
+    then
+        rm -f "$_tmp"
+        exec 9>&-
+        return 1
+    fi
+    chmod 600 "$_tmp" || { rm -f "$_tmp"; exec 9>&-; return 1; }
+    mv -f "$_tmp" "$CONFIG_FILE" || { rm -f "$_tmp"; exec 9>&-; return 1; }
+    exec 9>&-
 }
 
 # 检查是否已配置（单次文件遍历）
@@ -152,7 +191,7 @@ interactive_config() {
     fi
 
     OPERATOR="$_operator"
-    save_config "$_username" "$_password" "$_at"
+    save_config "$_username" "$_password" "$_at" || return 1
     log_success "配置已保存到 $CONFIG_FILE"
     echo ""
 }
