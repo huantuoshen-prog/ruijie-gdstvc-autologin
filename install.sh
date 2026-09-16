@@ -41,12 +41,12 @@ fi
 rm -rf "$STAGE"
 trap 'rm -rf "$STAGE"' EXIT HUP INT TERM
 mkdir -p "$STAGE/lib" "$STAGE/init.d"
-for file in ruijie.sh ruijie_student.sh ruijie_teacher.sh ruijiectl uninstall.sh rollback.sh; do
+for file in ruijie.sh ruijie_student.sh ruijie_teacher.sh ruijiectl install.sh uninstall.sh rollback.sh; do
     [ -f "$SOURCE_DIR/$file" ] && cp "$SOURCE_DIR/$file" "$STAGE/$file"
 done
 cp "$SOURCE_DIR"/lib/*.sh "$STAGE/lib/"
 cp "$SOURCE_DIR/init.d/ruijie" "$STAGE/init.d/ruijie"
-chmod 700 "$STAGE"/ruijiectl "$STAGE"/rollback.sh
+chmod 700 "$STAGE"/ruijiectl "$STAGE"/install.sh "$STAGE"/rollback.sh
 chmod 755 "$STAGE"/ruijie.sh "$STAGE"/ruijie_student.sh "$STAGE"/ruijie_teacher.sh "$STAGE"/uninstall.sh "$STAGE"/init.d/ruijie "$STAGE"/lib/*.sh
 
 if [ "$service_running" = true ]; then
