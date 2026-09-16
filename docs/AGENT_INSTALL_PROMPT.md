@@ -22,6 +22,9 @@ https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/blob/main/docs/insta
 6. 安装本身不得调用 auth ensure、auth reauth 或 auth logout，不得触发真实校园网认证或下线。
 7. 安装后只运行 /etc/ruijie/ruijiectl runtime 和 config get 做只读验证。除非我明确授权，不要启动服务或改账号。
 
+如果前置检查通过，可以直接执行这一行：
+T="$(mktemp -d /tmp/ruijie-core.XXXXXX)" && cd "$T" && curl -fsSLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/ruijie-core-4.0.0.tar.gz && curl -fsSLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/SHA256SUMS && grep ' ruijie-core-4.0.0.tar.gz$' SHA256SUMS | sha256sum -c - && tar -xzf ruijie-core-4.0.0.tar.gz && cd ruijie-core && sha256sum -c manifest.sha256 && sh install.sh
+
 请输出：
 - 路由器环境与依赖检查结果
 - 下载的固定版本和校验结果

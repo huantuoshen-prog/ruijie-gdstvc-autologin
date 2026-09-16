@@ -6,6 +6,18 @@
 [![ShellCheck](https://img.shields.io/badge/ShellCheck-passed-green)](https://github.com/koalaman/shellcheck)
 [![版本](https://img.shields.io/badge/version-v4.0.0-blue)](https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases)
 
+## 第一次使用？复制这一行
+
+请在路由器的 SSH / TTYD 终端中执行。它会下载固定的 v4.0.0 完整包、校验文件、安装核心，并且不会主动认证或退出校园网：
+
+```sh
+T="$(mktemp -d /tmp/ruijie-core.XXXXXX)" && cd "$T" && curl -fsSLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/ruijie-core-4.0.0.tar.gz && curl -fsSLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/SHA256SUMS && grep ' ruijie-core-4.0.0.tar.gz$' SHA256SUMS | sha256sum -c - && tar -xzf ruijie-core-4.0.0.tar.gz && cd ruijie-core && sha256sum -c manifest.sha256 && sh install.sh
+```
+
+安装后只想使用网页管理，请下载 [Web 面板的一体组合包](https://github.com/huantuoshen-prog/ruijie-web-panel/releases/tag/v4.0.0)，里面已经包含匹配的核心和面板。完整步骤与回滚方法见 [安装文档](./docs/install.md)。
+
+这套工具只支持 OpenWrt、iStoreOS、ImmortalWrt 等 OpenWrt 系路由器；不支持 Windows、macOS 或普通 Linux 桌面直接安装。
+
 支持这些核心能力：
 
 - 自动完成锐捷 Web 认证
@@ -34,7 +46,7 @@
 - 让 Agent 帮你安装（默认按路由器部署）： [docs/AGENT_INSTALL_PROMPT.md](./docs/AGENT_INSTALL_PROMPT.md)
 - 已安装后让 Agent 排障： [docs/AGENT_DEBUG_PROMPT.md](./docs/AGENT_DEBUG_PROMPT.md)
 
-## 快速入口
+## 你可能要看的内容
 
 - [路由器部署快速开始](#路由器部署)
 - [详细安装文档](./docs/install.md)
@@ -58,13 +70,13 @@
 | 想要图形界面 | 搭配 `ruijie-web-panel` | 浏览器里管理账号、daemon 和日志 |
 | 想让 Agent 排障 | 开启健康监听 | 用 `--json` 接口和健康日志定位问题 |
 
-## 快速开始
+## 详细安装（给想了解过程的人）
 
 ### 路由器部署
 
-适合 OpenWrt / iStoreOS / ImmortalWrt 路由器，多台设备共享上网。
+适合 OpenWrt / iStoreOS / ImmortalWrt 路由器，多台设备共享上网。大多数人直接使用上面的“一行命令”即可。
 
-```bash
+```sh
 cd /tmp
 curl -fLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/ruijie-core-4.0.0.tar.gz
 curl -fLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/SHA256SUMS

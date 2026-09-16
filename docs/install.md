@@ -9,6 +9,16 @@ command -v bash curl jq flock sha256sum tar
 test -x /sbin/procd || echo '此固件不支持 procd'
 ```
 
+## 最简单的一行安装
+
+如果你只是想完成首次安装，请在路由器 SSH / TTYD 终端复制这一行。它固定下载 v4.0.0、自动校验完整包，安装阶段不会主动认证或退出校园网：
+
+```sh
+T="$(mktemp -d /tmp/ruijie-core.XXXXXX)" && cd "$T" && curl -fsSLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/ruijie-core-4.0.0.tar.gz && curl -fsSLO https://github.com/huantuoshen-prog/ruijie-gdstvc-autologin/releases/download/v4.0.0/SHA256SUMS && grep ' ruijie-core-4.0.0.tar.gz$' SHA256SUMS | sha256sum -c - && tar -xzf ruijie-core-4.0.0.tar.gz && cd ruijie-core && sha256sum -c manifest.sha256 && sh install.sh
+```
+
+命令需要在路由器上以管理员身份运行，并要求 `curl`、`sha256sum`、`tar` 已存在。依赖缺失时不要跳过校验，先按固件自己的软件源安装依赖。
+
 从固定 GitHub Release 下载完整 `ruijie-core-<version>.tar.gz`，并解压；不要执行来自 `main` 的单文件下载。进入解压目录后运行：
 
 ```sh
