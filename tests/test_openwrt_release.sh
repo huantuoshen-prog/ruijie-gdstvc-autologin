@@ -5,6 +5,7 @@ set -eu
 ARCHIVE="${1:?core release archive required}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"; rm -f /var/run/ruijie-daemon.pid' EXIT
+mkdir -p /var/run
 
 extract_release() {
     directory="$1"
