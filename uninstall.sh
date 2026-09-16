@@ -132,5 +132,5 @@ else
     echo "已保留：配置文件（账号信息）"
 fi
 echo ""
-echo "如需重新安装，请运行 setup.sh 或从 GitHub 拉取最新版本"
+echo "如需重新安装，请使用 GitHub Release 中带校验值的完整发布包"
 echo ""

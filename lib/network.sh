@@ -37,13 +37,13 @@ get_service_type() {
 # 检查网络是否已连接 (HTTP 204 = 已认证)
 # 显式区分: 204=在线, 000=超时/不可达, 其他=异常
 check_network() {
+    NETWORK_CHECK_RESULT="unknown"
     _code=$(curl_with_proxy -sS -I --connect-timeout 3 --max-time 5 -o /dev/null -w "%{http_code}" http://www.google.cn/generate_204 2>/dev/null)
     case "$_code" in
-        204) return 0 ;;
-        000) : ;;
-        *)   : ;;
+        204) NETWORK_CHECK_RESULT="online"; return 0 ;;
+        000|'') NETWORK_CHECK_RESULT="unknown"; return 2 ;;
+        *) NETWORK_CHECK_RESULT="offline"; return 1 ;;
     esac
-    return 1
 }
 
 # 执行完整登录流程 (对齐工作脚本逻辑)

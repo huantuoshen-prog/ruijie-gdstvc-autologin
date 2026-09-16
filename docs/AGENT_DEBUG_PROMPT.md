@@ -59,7 +59,7 @@
 
 分析要求：
 - 先判断当前是否在线、daemon 是否在运行、健康监听是否开启、collector 是否活跃
-- 再结合 runtime 判断运行环境：openwrt 还是普通 linux、shell、nohup backend、关键路径、面板是否已安装
+- 再结合 runtime 判断 OpenWrt 环境、shell、procd 能力、关键路径、面板是否已安装
 - 再从 health log 里找出最近的 state_transition、auth_failed、network_error、daemon、monitor 事件
 - 如果 status、health snapshot、health log 之间有冲突，要明确指出冲突点
 - 如果问题更像环境问题、配置问题、网络问题或脚本 bug，请明确分类
@@ -91,7 +91,7 @@
 ## 期望 Agent 重点关注什么
 
 - `status.health.collector_active` 或 `health.collector_active`
-- `runtime.nohup_backend`
+- `runtime.procd_present`
 - `runtime.script_dir`、`runtime.config_file`、`runtime.daemon_logfile`
 - 健康日志里的 `auth_failed`、`network_error`、`state_transition`、`daemon`
 - `snapshot` 和 `status` 中 `online` / `daemon_running` / `daemon_state` 是否一致

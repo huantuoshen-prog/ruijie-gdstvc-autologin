@@ -38,9 +38,15 @@ with_operation_lock() {
 }
 
 status_json() {
-    local online=false desired=false process=false last_auth='' now pid='' state='' uptime=''
+    local online=null connectivity=unknown desired=false process=false last_auth='' now pid='' state='' uptime=''
     load_config 2>/dev/null || true
-    check_network && online=true
+    if check_network; then
+        online=true
+        connectivity=online
+    elif [ "${NETWORK_CHECK_RESULT:-unknown}" = offline ]; then
+        online=false
+        connectivity=offline
+    fi
     if [ -f /var/run/ruijie.desired ]; then
         [ "$(cat /var/run/ruijie.desired 2>/dev/null)" = running ] && desired=true
     elif [ -f /etc/init.d/ruijie ] && /etc/init.d/ruijie enabled >/dev/null 2>&1; then
@@ -57,7 +63,8 @@ status_json() {
     jq -cn --argjson online "$online" --argjson desired "$desired" --argjson process "$process" \
         --arg last_auth "$last_auth" --arg version "$RUIJIE_VERSION" --arg username "${USERNAME:-}" \
         --arg operator "${OPERATOR:-DianXin}" --arg account_type "${ACCOUNT_TYPE:-student}" --arg pid "$pid" --arg state "$state" --arg uptime "$uptime" --argjson observed_at "$now" \
-        '{installed:true,online:$online,desired_running:$desired,process_running:$process,daemon_running:$process,daemon_pid:$pid,daemon_state:$state,daemon_uptime:$uptime,last_auth:$last_auth,version:$version,username:$username,operator:$operator,account_type:$account_type,observed_at:$observed_at,state_age_seconds:0,stale:false}'
+        --arg connectivity "$connectivity" \
+        '{installed:true,online:$online,connectivity:$connectivity,desired_running:$desired,process_running:$process,daemon_running:$process,daemon_pid:$pid,daemon_state:$state,daemon_uptime:$uptime,last_auth:$last_auth,version:$version,username:$username,operator:$operator,account_type:$account_type,observed_at:$observed_at,state_age_seconds:0,stale:false}'
 }
 
 config_get() {
@@ -115,7 +122,7 @@ auth_action() {
     load_config
     case "$action" in ensure) mode=ensure;; reauth) mode=reauth;; logout) do_logout "${USERNAME:-}"; json_response true OK 'logout requested'; return;; *) json_response false INVALID_ARGUMENT 'invalid auth action'; return 2;; esac
     # Each network phase has a bounded curl timeout; the full path is below 60 seconds.
-    bash "$SCRIPT_DIR/ruijiectl" _auth-run "$mode" && json_response true OK 'authentication completed' "$(status_json)" || { json_response false AUTH_FAILED 'authentication failed or timed out' "$(status_json)"; return 1; }
+    bash "$SCRIPT_DIR/ruijiectl" _auth-run "$mode" >&2 && json_response true OK 'authentication completed' "$(status_json)" || { json_response false AUTH_FAILED 'authentication failed or timed out' "$(status_json)"; return 1; }
 }
 
 health_action() {

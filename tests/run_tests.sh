@@ -144,14 +144,14 @@ run_integration_tests() {
     if [ -L "${PROJECT_DIR}/ruijie_student.sh" ]; then
         pass "ruijie_student.sh 是符号链接"
     elif [ -f "${PROJECT_DIR}/ruijie_student.sh" ]; then
-        pass "ruijie_student.sh 存在 (Windows兼容模式)"
+        pass "ruijie_student.sh 包装入口存在"
     else
         fail "ruijie_student.sh 不存在"
     fi
     if [ -L "${PROJECT_DIR}/ruijie_teacher.sh" ]; then
         pass "ruijie_teacher.sh 是符号链接"
     elif [ -f "${PROJECT_DIR}/ruijie_teacher.sh" ]; then
-        pass "ruijie_teacher.sh 存在 (Windows兼容模式)"
+        pass "ruijie_teacher.sh 包装入口存在"
     else
         fail "ruijie_teacher.sh 不存在"
     fi
@@ -161,7 +161,7 @@ run_integration_tests() {
         _target=$(readlink "${PROJECT_DIR}/ruijie_student.sh")
         [ "$_target" = "ruijie.sh" ] && pass "符号链接指向正确" || fail "符号链接指向: $_target"
     else
-        pass "符号链接测试跳过 (Windows兼容模式)"
+        pass "包装脚本模式无需符号链接检查"
     fi
 
     # 测试8: OpenWrt procd 服务存在

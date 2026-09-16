@@ -1,148 +1,76 @@
-# 命令与配置说明
+# 命令与配置
 
-## 完整命令行参数
+`/etc/ruijie/ruijiectl` 是配置、服务、认证、状态和日志的统一入口。所有 JSON 响应使用 schema `2`，包含 `success`、`code`、`message` 和 `data`。
 
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| `--student` | 使用学生账号模式（默认） | `./ruijie.sh --student` |
-| `--teacher` | 使用教师账号模式 | `./ruijie.sh --teacher` |
-| `-u, --username 用户名` | 指定用户名 | `./ruijie.sh -u 2023000001 -p 密码` |
-| `-p, --password 密码` | 指定密码 | `./ruijie.sh -u 2023000001 -p 123456` |
-| `--operator DianXin\|LianTong` | 指定运营商 | `./ruijie.sh --operator LianTong` |
-| `--proxy URL` | 设置 HTTP 代理 | `./ruijie.sh --proxy http://127.0.0.1:7890` |
-| `-d, --daemon` | 后台守护进程模式 | `./ruijie.sh --daemon` |
-| `--stop` | 停止守护进程 | `./ruijie.sh --stop` |
-| `--status`, `--info` | 查看状态 | `./ruijie.sh --status` |
-| `--json` | 以 JSON 输出状态 / 健康 / 运行环境信息 | `./ruijie.sh --status --json` |
-| `--logout` | 主动下线 | `./ruijie.sh --logout` |
-| `--setup` | 交互式配置 | `./ruijie.sh --setup` |
-| `--health-status` | 查看健康监听状态 | `./ruijie.sh --health-status --json` |
-| `--health-enable 时长` | 启用健康监听 | `./ruijie.sh --health-enable 3d` |
-| `--health-disable` | 关闭健康监听 | `./ruijie.sh --health-disable` |
-| `--health-log` | 查看健康日志 | `./ruijie.sh --health-log --lines 100 --json` |
-| `--runtime-status` | 查看运行环境摘要 | `./ruijie.sh --runtime-status --json` |
-| `--lines N` | 配合 `--health-log` 指定条数 | `./ruijie.sh --health-log --lines 50 --json` |
-| `--level LEVEL` | 配合 `--health-log` 按级别过滤 | `./ruijie.sh --health-log --level ERROR --json` |
-| `--type TYPE` | 配合 `--health-log` 按事件类型过滤 | `./ruijie.sh --health-log --type auth_failed --json` |
-| `-v, --verbose` | 显示详细调试信息 | `./ruijie.sh -v` |
-| `-h, --help` | 显示帮助 | `./ruijie.sh --help` |
-| `-V, --version` | 显示版本 | `./ruijie.sh --version` |
+## 状态与运行环境
 
-## 位置参数
-
-仍然支持旧式写法：
-
-```bash
-./ruijie.sh 2023000001 123456
+```sh
+/etc/ruijie/ruijiectl runtime
+/etc/ruijie/ruijiectl status
+/etc/ruijie/ruijiectl health status
+/etc/ruijie/ruijiectl logs daemon 100
+/etc/ruijie/ruijiectl logs health 100
 ```
 
-等价于：
+## 服务控制
 
-```bash
-./ruijie.sh -u 2023000001 -p 123456
+```sh
+/etc/ruijie/ruijiectl service start
+/etc/ruijie/ruijiectl service stop
+/etc/ruijie/ruijiectl service restart
+/etc/ruijie/ruijiectl service enable
+/etc/ruijie/ruijiectl service disable
 ```
 
-## 符号链接模式
+- `start`、`stop`、`restart` 控制本次自动重连进程。
+- `enable`、`disable` 控制开机是否自动启动。
+- `stop` 不会主动退出已经建立的校园网认证。
 
-脚本支持通过文件名自动切换账号类型：
+## 认证控制
 
-| 链接名 | 模式 |
-|------|------|
-| `ruijie.sh` | 学生账号（默认） |
-| `ruijie_student.sh` | 学生账号 |
-| `ruijie_teacher.sh` | 教师账号 |
-
-Linux 下可以这样创建：
-
-```bash
-ln -s ruijie.sh ruijie_student.sh
-ln -s ruijie.sh ruijie_teacher.sh
+```sh
+/etc/ruijie/ruijiectl auth ensure
+/etc/ruijie/ruijiectl auth reauth
+/etc/ruijie/ruijiectl auth logout
 ```
 
-## 退出码
+- `ensure` 已在线时不重复认证。
+- `reauth` 强制重新走认证流程。
+- `logout` 主动断开认证，执行前应明确确认。
+- 同一时间只允许一个认证或服务变更；已有操作运行时返回 `BUSY`。
 
-| 退出码 | 常量名 | 说明 |
-|--------|--------|------|
-| 10 | `EXIT_NETWORK_UNREACHABLE` | 网络不可达 |
-| 11 | `EXIT_AUTH_FAILED` | 认证失败 |
-| 12 | `EXIT_CONFIG_MISSING` | 配置缺失 |
-| 13 | `EXIT_DAEMON_ALREADY_RUNNING` | 守护进程已在运行 |
-| 14 | `EXIT_PERMISSION_DENIED` | 权限不足 |
+每个网络阶段都有超时，单次认证总预算不超过 60 秒。只有上游返回成功且后续连通性验证通过，才算认证成功。
 
-## 常见用法
+## 配置
 
-```bash
-# 交互式配置
-./ruijie.sh --setup
-
-# 学生账号登录
-./ruijie.sh -u 2023000001 -p 123456
-
-# 教师账号 + 联通
-./ruijie.sh --teacher -u T00001 -p 123456 --operator LianTong
-
-# 启动守护进程
-./ruijie.sh --daemon
-
-# 查看状态（人类可读）
-./ruijie.sh --status
-
-# 查看状态（JSON）
-./ruijie.sh --status --json
+```sh
+/etc/ruijie/ruijiectl config get
 ```
 
-## 配置文件
+返回内容会隐藏密码，并包含 `revision`。修改配置时，将完整 JSON 通过标准输入传入：
 
-### 路径与权限
-
-| 项目 | 说明 |
-|------|------|
-| 配置目录 | `~/.config/ruijie/` |
-| 配置文件 | `~/.config/ruijie/ruijie.conf` |
-| 权限要求 | `600` |
-
-### 配置项
-
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `USERNAME` | 用户名（学号/工号） | - |
-| `PASSWORD` | 密码 | - |
-| `ACCOUNT_TYPE` | `student` / `teacher` | `student` |
-| `OPERATOR` | `DianXin` / `LianTong` | `DianXin` |
-| `DAEMON_INTERVAL` | 在线检测间隔（秒） | `300` |
-| `PROXY_URL` | HTTP 代理 | 空 |
-| `PROXY_URL_HTTPS` | HTTPS 代理 | 空 |
-| `NO_PROXY_LIST` | 不走代理地址列表 | 见默认值 |
-
-默认 `NO_PROXY_LIST`：
-
-```text
-www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com
+```sh
+cat config-update.json | /etc/ruijie/ruijiectl config set
 ```
 
-### 配置示例
+示例文件：
 
-```bash
-USERNAME=2023000000
-PASSWORD=your_password
-ACCOUNT_TYPE=student
-OPERATOR=DianXin
-DAEMON_INTERVAL=300
-PROXY_URL=
-PROXY_URL_HTTPS=
-NO_PROXY_LIST=www.google.cn,www.google.com,connectivitycheck.gstatic.com,connectivitycheck.android.com
+```json
+{
+  "username": "2023000000",
+  "password": "请在本地填写，不要提交到仓库",
+  "account_type": "student",
+  "operator": "DianXin",
+  "proxy_url": "",
+  "proxy_url_https": "",
+  "revision": "从 config get 复制"
+}
 ```
 
-## 代理说明
+账号类型支持 `student`、`teacher`；运营商支持 `DianXin`、`LianTong`，教师账号也可使用 `default`。密码保留首尾空格，但拒绝换行、NUL 等无法安全写入配置文件的控制字符。
 
-适用场景：
+配置文件位于 `/root/.config/ruijie/ruijie.conf`，权限为 `600`。核心使用独立写锁、同目录临时文件和原子替换；revision 过期会返回 `CONFLICT`。
 
-- 需要通过代理访问外网
-- 某些环境里不直连外部探测地址
+## 兼容入口
 
-```bash
-./ruijie.sh -u 2023000000 -p 密码 --proxy http://127.0.0.1:7890
-```
-
-如果你想继续看 daemon、状态机和健康监听：
-[daemon-and-health.md](./daemon-and-health.md)
+旧的 `ruijie.sh` 常用参数仍保留，供既有自动化迁移。新脚本和 Web 面板应使用 `ruijiectl`，并通过标准输入传递敏感配置，避免密码出现在进程列表和日志中。

@@ -241,7 +241,8 @@ main() {
             if [ -x "${SCRIPT_DIR}/ruijiectl" ]; then
                 exec "${SCRIPT_DIR}/ruijiectl" service stop
             fi
-            daemon_stop; exit $?
+            log_error "ruijiectl 不存在，无法通过 procd 停止服务"
+            exit 1
             ;;
         status)
             if [ "$OUTPUT_JSON" = "true" ]; then
@@ -331,7 +332,8 @@ main() {
         if [ -x "${SCRIPT_DIR}/ruijiectl" ]; then
             exec "${SCRIPT_DIR}/ruijiectl" service start
         fi
-        daemon_start; exit $?
+        log_error "ruijiectl 不存在，无法通过 procd 启动服务"
+        exit 1
     fi
 
     # 正常登录流程

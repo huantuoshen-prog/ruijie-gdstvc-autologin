@@ -50,7 +50,7 @@ EOF
 
 health_enable "1d" >/dev/null
 
-check_network() { return 1; }
+check_network() { NETWORK_CHECK_RESULT=offline; return 1; }
 do_login() { return 1; }
 sleep() { :; }
 
