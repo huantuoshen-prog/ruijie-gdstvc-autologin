@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build fixed core archive
-        run: BUILD_TIME=2026-09-16T00:00:00Z ./release.sh
+        run: BUILD_TIME=2026-09-16T00:00:00Z sh release.sh
       - name: Import verified official OpenWrt rootfs
         env:
           ROOTFS_URL: ${{ matrix.rootfs_url }}
