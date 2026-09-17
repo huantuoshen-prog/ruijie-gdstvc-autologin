@@ -76,6 +76,24 @@ else
     fail "daemon 采样时未刷新健康状态快照"
 fi
 
+# 用户手动登录或上游自行恢复时，do_login 的 ensure 模式会直接返回成功。
+# 守护进程必须如实记录“网络已恢复”，不能冒充脚本完成了认证。
+: > "$HEALTH_LOGFILE"
+: > "$LOGFILE"
+rm -f "$HEALTH_STATUS_FILE" "$RUNTIME_STATUS_FILE"
+check_network() { NETWORK_CHECK_RESULT=offline; return 1; }
+do_login() { LOGIN_RESULT_KIND=already_online; return 0; }
+DAEMON_TEST_MAX_LOOPS=2
+daemon_loop >/dev/null 2>&1 || true
+
+if grep -q '"type":"network_recovered"' "$HEALTH_LOGFILE" \
+    && grep -q '网络已恢复（未发起认证）' "$LOGFILE" \
+    && ! grep -q '"type":"auth_success"' "$HEALTH_LOGFILE"; then
+    pass "外部恢复网络时不会误报脚本认证成功"
+else
+    fail "外部恢复网络时仍被误报为脚本认证成功"
+fi
+
 echo ""
 echo "=========================================="
 echo "  结果: ${GREEN}${PASS} passed${NC}, ${RED}${FAIL} failed${NC}"

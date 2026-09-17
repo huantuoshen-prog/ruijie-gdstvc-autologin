@@ -1,5 +1,11 @@
 # Changelog - Ruijie-Auto-Login
 
+## Unreleased
+
+### Fixed
+- 保留校园门户下发的 `ssid`、`snmpagentip`、`apmac`、`port`、`nasportid` 等设备定位参数，避免认证服务器误判“WEB认证设备未注册”
+- 区分脚本认证成功与用户手动登录、上游自行恢复，避免守护日志误报“认证成功”
+
 ## v4.0.0 (2026-09-16)
 
 ### Added

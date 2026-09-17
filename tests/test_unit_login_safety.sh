@@ -65,7 +65,7 @@ curl_with_proxy() {
             fi
             ;;
         *generate_204*)
-            printf "location='http://172.16.16.16/eportal/index.jsp?wlanuserip=ip&wlanacname=ac&nasip=nas&mac=mac&nasid=nasid&vid=vid&url=url'"
+            printf "location='http://172.16.16.16/eportal/index.jsp?wlanuserip=ip&wlanacname=ac&ssid=campus&nasip=nas&snmpagentip=agent&mac=mac&t=wireless-v2&url=url&apmac=ap&nasid=nasid&vid=vid&port=port-id&nasportid=nas-port-id'"
             ;;
         *InterFace.do*)
             printf '%s' "$*" > "$AUTH_ARGS_FILE"
@@ -82,6 +82,14 @@ if do_login "user" "pass" "student" "DianXin" >/tmp/ruijie-login-timeout.out 2>&
         pass "登录 curl 请求包含连接与总超时"
     else
         fail "登录 curl 请求缺少连接或总超时: $(cat "$AUTH_ARGS_FILE" 2>/dev/null)"
+    fi
+    if grep -q -- '%2526ssid%253Dcampus' "$AUTH_ARGS_FILE" \
+        && grep -q -- '%2526snmpagentip%253Dagent' "$AUTH_ARGS_FILE" \
+        && grep -q -- '%2526apmac%253Dap' "$AUTH_ARGS_FILE" \
+        && grep -q -- '%2526port%253Dport-id%2526nasportid%253Dnas-port-id' "$AUTH_ARGS_FILE"; then
+        pass "登录请求保留门户返回的设备定位参数"
+    else
+        fail "登录请求丢失门户设备定位参数: $(cat "$AUTH_ARGS_FILE" 2>/dev/null)"
     fi
 else
     fail "mock 登录流程应成功"

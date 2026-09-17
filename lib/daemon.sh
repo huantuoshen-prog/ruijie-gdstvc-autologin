@@ -388,8 +388,13 @@ daemon_loop() {
                 if _daemon_login; then
                     _reset_backoff
                     _state="ONLINE"
-                    _log_daemon "[CHECKING→ONLINE] 认证成功"
-                    _daemon_health_event "OK" "auth_success" "首次重试认证成功" "{}"
+                    if [ "${LOGIN_RESULT_KIND:-}" = "already_online" ]; then
+                        _log_daemon "[CHECKING→ONLINE] 网络已恢复（未发起认证）"
+                        _daemon_health_event "OK" "network_recovered" "网络已恢复，无需发起认证" "{}"
+                    else
+                        _log_daemon "[CHECKING→ONLINE] 认证成功"
+                        _daemon_health_event "OK" "auth_success" "首次重试认证成功" "{}"
+                    fi
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
                     _state="RETRYING"
@@ -404,8 +409,13 @@ daemon_loop() {
                 if _daemon_login; then
                     _reset_backoff
                     _state="ONLINE"
-                    _log_daemon "[RETRYING→ONLINE] 认证成功，网络已恢复"
-                    _daemon_health_event "OK" "auth_success" "退避重试认证成功" "{}"
+                    if [ "${LOGIN_RESULT_KIND:-}" = "already_online" ]; then
+                        _log_daemon "[RETRYING→ONLINE] 网络已恢复（未发起认证）"
+                        _daemon_health_event "OK" "network_recovered" "网络已恢复，无需发起认证" "{}"
+                    else
+                        _log_daemon "[RETRYING→ONLINE] 认证成功，网络已恢复"
+                        _daemon_health_event "OK" "auth_success" "退避重试认证成功" "{}"
+                    fi
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
                     _count=$(_get_backoff_count)
@@ -425,8 +435,13 @@ daemon_loop() {
                 if _daemon_login; then
                     _reset_backoff
                     _state="ONLINE"
-                    _log_daemon "[WAIT_LONG→ONLINE] 认证成功，网络已恢复"
-                    _daemon_health_event "OK" "auth_success" "长时间等待后认证成功" "{}"
+                    if [ "${LOGIN_RESULT_KIND:-}" = "already_online" ]; then
+                        _log_daemon "[WAIT_LONG→ONLINE] 网络已恢复（未发起认证）"
+                        _daemon_health_event "OK" "network_recovered" "网络已恢复，无需发起认证" "{}"
+                    else
+                        _log_daemon "[WAIT_LONG→ONLINE] 认证成功，网络已恢复"
+                        _daemon_health_event "OK" "auth_success" "长时间等待后认证成功" "{}"
+                    fi
                     _interval=$_DAEMON_INTERVAL_ONLINE
                 else
                     _interval=$_DAEMON_INTERVAL_LONG

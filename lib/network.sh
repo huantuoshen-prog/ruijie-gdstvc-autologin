@@ -53,6 +53,9 @@ do_login() {
     _account_type="${3:-student}"
     _operator="${4:-${OPERATOR:-DianXin}}"
     _mode="${5:-ensure}"
+    # 供守护进程区分“脚本完成了认证”和“用户/上游已经恢复网络”。
+    # 默认保持 failed，只有下面两条明确的成功路径会更新。
+    LOGIN_RESULT_KIND="failed"
 
     # 函数入口立即清理上次的 EXTRA_NO_PROXY，RETURN trap 确保任何退出路径都清理
     unset EXTRA_NO_PROXY 2>/dev/null
@@ -61,6 +64,7 @@ do_login() {
     # 检查是否已连接
     log_step "检查网络连接状态..."
     if [ "$_mode" != "reauth" ] && check_network; then
+        LOGIN_RESULT_KIND="already_online"
         log_success "网络连接正常，无需认证"
         return 0
     fi
@@ -107,6 +111,12 @@ do_login() {
     _nasid=$(echo "$_login_page_url" | grep -oE "nasid=[^&]+" | cut -d= -f2-)
     _vid=$(echo "$_login_page_url" | grep -oE "vid=[^&]+" | cut -d= -f2-)
     _url=$(echo "$_login_page_url" | grep -oE "url=[^&]+" | cut -d= -f2-)
+    _ssid=$(echo "$_login_page_url" | grep -oE "ssid=[^&]*" | cut -d= -f2-)
+    _snmpagentip=$(echo "$_login_page_url" | grep -oE "snmpagentip=[^&]*" | cut -d= -f2-)
+    _t=$(echo "$_login_page_url" | grep -oE "[?&]t=[^&]*" | head -1 | cut -d= -f2-)
+    _apmac=$(echo "$_login_page_url" | grep -oE "apmac=[^&]*" | cut -d= -f2-)
+    _port=$(echo "$_login_page_url" | grep -oE "[?&]port=[^&]*" | head -1 | cut -d= -f2-)
+    _nasportid=$(echo "$_login_page_url" | grep -oE "nasportid=[^&]*" | cut -d= -f2-)
 
     # 统计缺失的关键参数数量，过多缺失时直接失败，避免使用过期或他人的网络参数
     _missing=0
@@ -123,8 +133,10 @@ do_login() {
         return 1
     fi
 
-    # 动态参数可用，vid/url 用提取值（空则留空）
-    _queryString="wlanuserip=${_wlanuserip}&wlanacname=${_wlanacname}&ssid=&nasip=${_nasip}&snmpagentip=&mac=${_mac}&t=wireless-v2&url=${_url}&apmac=&nasid=${_nasid}&vid=${_vid}&port=&nasportid="
+    # 原样保留门户返回的设备定位参数。port/nasportid 在部分校园网会参与
+    # NAS 设备匹配，丢弃它们会被服务器判定为“WEB认证设备未注册”。
+    [ -n "$_t" ] || _t="wireless-v2"
+    _queryString="wlanuserip=${_wlanuserip}&wlanacname=${_wlanacname}&ssid=${_ssid}&nasip=${_nasip}&snmpagentip=${_snmpagentip}&mac=${_mac}&t=${_t}&url=${_url}&apmac=${_apmac}&nasid=${_nasid}&vid=${_vid}&port=${_port}&nasportid=${_nasportid}"
     _queryString="${_queryString//&/%2526}"
     _queryString="${_queryString//=/%253D}"
 
@@ -183,6 +195,7 @@ do_login() {
     sleep 2
 
     if check_network; then
+        LOGIN_RESULT_KIND="authenticated"
         echo ""
         log_success "=========================================="
         log_success "  校园网认证成功，网络已连接!"
