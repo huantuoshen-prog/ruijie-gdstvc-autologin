@@ -18,6 +18,27 @@ build_login_url() {
     echo "$_login_url"
 }
 
+# 精确读取 portal URL 的单个查询参数。
+# 不能直接 grep "mac="，否则会把 apmac 的值也拼进来。
+get_portal_param() {
+    _param_url="$1"
+    _param_name="$2"
+    _param_query="${_param_url#*\?}"
+
+    while true; do
+        _param_pair="${_param_query%%&*}"
+        case "$_param_pair" in
+            "${_param_name}="*)
+                printf '%s' "${_param_pair#*=}"
+                return 0
+                ;;
+        esac
+        [ "$_param_query" = "$_param_pair" ] && break
+        _param_query="${_param_query#*&}"
+    done
+    return 0
+}
+
 # 获取服务类型
 # 用法: get_service_type [account_type] [operator]
 # operator 优先，account_type 次之，默认 DianXin
@@ -104,19 +125,19 @@ do_login() {
     log_info "认证URL: $_login_url"
 
     # 从 portal URL 动态提取参数，构建 queryString
-    _wlanuserip=$(echo "$_login_page_url" | grep -oE "wlanuserip=[^&]+" | cut -d= -f2-)
-    _wlanacname=$(echo "$_login_page_url" | grep -oE "wlanacname=[^&]+" | cut -d= -f2-)
-    _nasip=$(echo "$_login_page_url" | grep -oE "nasip=[^&]+" | cut -d= -f2-)
-    _mac=$(echo "$_login_page_url" | grep -oE "mac=[^&]+" | cut -d= -f2-)
-    _nasid=$(echo "$_login_page_url" | grep -oE "nasid=[^&]+" | cut -d= -f2-)
-    _vid=$(echo "$_login_page_url" | grep -oE "vid=[^&]+" | cut -d= -f2-)
-    _url=$(echo "$_login_page_url" | grep -oE "url=[^&]+" | cut -d= -f2-)
-    _ssid=$(echo "$_login_page_url" | grep -oE "ssid=[^&]*" | cut -d= -f2-)
-    _snmpagentip=$(echo "$_login_page_url" | grep -oE "snmpagentip=[^&]*" | cut -d= -f2-)
-    _t=$(echo "$_login_page_url" | grep -oE "[?&]t=[^&]*" | head -1 | cut -d= -f2-)
-    _apmac=$(echo "$_login_page_url" | grep -oE "apmac=[^&]*" | cut -d= -f2-)
-    _port=$(echo "$_login_page_url" | grep -oE "[?&]port=[^&]*" | head -1 | cut -d= -f2-)
-    _nasportid=$(echo "$_login_page_url" | grep -oE "nasportid=[^&]*" | cut -d= -f2-)
+    _wlanuserip=$(get_portal_param "$_login_page_url" wlanuserip)
+    _wlanacname=$(get_portal_param "$_login_page_url" wlanacname)
+    _nasip=$(get_portal_param "$_login_page_url" nasip)
+    _mac=$(get_portal_param "$_login_page_url" mac)
+    _nasid=$(get_portal_param "$_login_page_url" nasid)
+    _vid=$(get_portal_param "$_login_page_url" vid)
+    _url=$(get_portal_param "$_login_page_url" url)
+    _ssid=$(get_portal_param "$_login_page_url" ssid)
+    _snmpagentip=$(get_portal_param "$_login_page_url" snmpagentip)
+    _t=$(get_portal_param "$_login_page_url" t)
+    _apmac=$(get_portal_param "$_login_page_url" apmac)
+    _port=$(get_portal_param "$_login_page_url" port)
+    _nasportid=$(get_portal_param "$_login_page_url" nasportid)
 
     # 统计缺失的关键参数数量，过多缺失时直接失败，避免使用过期或他人的网络参数
     _missing=0
@@ -152,13 +173,15 @@ do_login() {
     log_info "用户名: $_username"
     log_info "账号类型: $_account_type"
 
+    # queryString 已按锐捷协议完成两层编码；必须用 --data 原样发送。
+    # 再用 --data-urlencode 会多编码一层，服务端无法识别 NAS 设备参数。
     authResult=$(curl_with_proxy -sS --connect-timeout 10 --max-time 30 -A "$USER_AGENT" \
         -e "${_login_page_url}" \
         -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
         --data-urlencode "userId=${_username}" \
         --data-urlencode "password=${_password}" \
         --data-urlencode "service=${_service}" \
-        --data-urlencode "queryString=${_queryString}" \
+        --data "queryString=${_queryString}" \
         --data-urlencode "operatorPwd=" --data-urlencode "operatorUserId=" \
         --data-urlencode "validcode=" --data-urlencode "passwordEncrypt=false" \
         -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" \

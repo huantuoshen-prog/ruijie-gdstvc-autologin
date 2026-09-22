@@ -68,7 +68,7 @@ curl_with_proxy() {
             printf "location='http://172.16.16.16/eportal/index.jsp?wlanuserip=ip&wlanacname=ac&ssid=campus&nasip=nas&snmpagentip=agent&mac=mac&t=wireless-v2&url=url&apmac=ap&nasid=nasid&vid=vid&port=port-id&nasportid=nas-port-id'"
             ;;
         *InterFace.do*)
-            printf '%s' "$*" > "$AUTH_ARGS_FILE"
+            printf '%s\n' "$@" > "$AUTH_ARGS_FILE"
             printf '{"result":"success","message":"ok"}'
             ;;
         *)
@@ -78,7 +78,12 @@ curl_with_proxy() {
 }
 
 if do_login "user" "pass" "student" "DianXin" >/tmp/ruijie-login-timeout.out 2>&1; then
-    if grep -q -- ' --connect-timeout 10 ' "$AUTH_ARGS_FILE" && grep -q -- ' --max-time 30 ' "$AUTH_ARGS_FILE"; then
+    if awk '
+        previous == "--connect-timeout" && $0 == "10" { connect_timeout = 1 }
+        previous == "--max-time" && $0 == "30" { max_time = 1 }
+        { previous = $0 }
+        END { exit !(connect_timeout && max_time) }
+    ' "$AUTH_ARGS_FILE"; then
         pass "登录 curl 请求包含连接与总超时"
     else
         fail "登录 curl 请求缺少连接或总超时: $(cat "$AUTH_ARGS_FILE" 2>/dev/null)"
@@ -86,10 +91,21 @@ if do_login "user" "pass" "student" "DianXin" >/tmp/ruijie-login-timeout.out 2>&
     if grep -q -- '%2526ssid%253Dcampus' "$AUTH_ARGS_FILE" \
         && grep -q -- '%2526snmpagentip%253Dagent' "$AUTH_ARGS_FILE" \
         && grep -q -- '%2526apmac%253Dap' "$AUTH_ARGS_FILE" \
+        && grep -q -- '%2526mac%253Dmac%2526t%253Dwireless-v2' "$AUTH_ARGS_FILE" \
         && grep -q -- '%2526port%253Dport-id%2526nasportid%253Dnas-port-id' "$AUTH_ARGS_FILE"; then
         pass "登录请求保留门户返回的设备定位参数"
     else
         fail "登录请求丢失门户设备定位参数: $(cat "$AUTH_ARGS_FILE" 2>/dev/null)"
+    fi
+    if awk '
+        previous == "--data" && /^queryString=/ { raw = 1 }
+        previous == "--data-urlencode" && /^queryString=/ { extra_encoded = 1 }
+        { previous = $0 }
+        END { exit !(raw && !extra_encoded) }
+    ' "$AUTH_ARGS_FILE"; then
+        pass "queryString 保持锐捷协议要求的编码层数"
+    else
+        fail "queryString 被 curl 额外编码或未作为原始表单字段发送"
     fi
 else
     fail "mock 登录流程应成功"

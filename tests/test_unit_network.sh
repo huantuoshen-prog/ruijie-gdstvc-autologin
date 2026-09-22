@@ -62,6 +62,17 @@ result=$(build_login_url "http://172.16.16.16:8080/eportal/index.jsp?wlanuserip=
 assert_equals "$result" "http://172.16.16.16:8080/eportal/InterFace.do?method=login"
 
 echo ""
+echo "========== get_portal_param 测试 =========="
+
+portal_url='http://portal/eportal/index.jsp?mac=client-mac&apmac=access-point&port=port-id&nasportid=nas-port-id&ssid='
+assert_equals "$(get_portal_param "$portal_url" mac)" "client-mac"
+assert_equals "$(get_portal_param "$portal_url" apmac)" "access-point"
+assert_equals "$(get_portal_param "$portal_url" port)" "port-id"
+assert_equals "$(get_portal_param "$portal_url" nasportid)" "nas-port-id"
+assert_equals "$(get_portal_param "$portal_url" ssid)" ""
+assert_equals "$(get_portal_param "$portal_url" missing)" ""
+
+echo ""
 echo "========== get_service_type 测试 =========="
 
 assert_equals "$(get_service_type teacher)" "default"
