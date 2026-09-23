@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- 从 HTTP `Location` 响应头或页面正文读取门户地址，兼容只通过 302 重定向的校园网门户
 - 保留校园门户下发的 `ssid`、`snmpagentip`、`apmac`、`port`、`nasportid` 等设备定位参数，避免认证服务器误判“WEB认证设备未注册”
 - 修正 `queryString` 被 curl 额外编码一层的问题，恢复锐捷门户要求的协议编码层数
 - 精确匹配 portal 查询参数，避免 `mac` 错误吸收 `apmac` 的值

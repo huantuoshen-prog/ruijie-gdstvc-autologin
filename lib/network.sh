@@ -39,6 +39,38 @@ get_portal_param() {
     return 0
 }
 
+# 从校园网探测响应中读取门户地址。校园网可能把地址放在 HTTP
+# Location 响应头中（302），也可能放在正文的 location='...' 脚本中。
+# curl 默认不会跟随重定向，因此必须同时检查响应头和正文。
+get_login_page_url() {
+    _portal_response="$(curl_with_proxy -sS --connect-timeout 5 --max-time 15 \
+        -D - -o - "http://www.google.cn/generate_204" 2>/dev/null)" || true
+
+    _portal_url="$(printf '%s\n' "$_portal_response" | awk '
+        /^HTTP\// { in_headers = 1; next }
+        in_headers && /^[[:space:]]*$/ { in_headers = 0; next }
+        in_headers && tolower($0) ~ /^location:[[:space:]]*/ {
+            sub(/^[^:]*:[[:space:]]*/, "")
+            gsub(/\r/, "")
+            location = $0
+        }
+        END { print location }
+    ')"
+    if [ -n "$_portal_url" ]; then
+        printf '%s' "$_portal_url"
+        return 0
+    fi
+
+    # 兼容仍然通过页面脚本输出门户地址的旧认证网关。
+    _portal_url="$(printf '%s\n' "$_portal_response" | awk -F "'" \
+        '$2 ~ /^https?:\/\// { print $2; exit }')"
+    if [ -z "$_portal_url" ]; then
+        _portal_url="$(printf '%s\n' "$_portal_response" | awk -F '"' \
+            '$2 ~ /^https?:\/\// { print $2; exit }')"
+    fi
+    printf '%s' "$_portal_url"
+}
+
 # 获取服务类型
 # 用法: get_service_type [account_type] [operator]
 # operator 优先，account_type 次之，默认 DianXin
@@ -94,7 +126,7 @@ do_login() {
 
     # 获取登录页面URL (对齐工作脚本: curl generate_204 + awk 提取)
     log_step "获取登录页面URL..."
-    _login_page_url=$(curl_with_proxy -sS --connect-timeout 5 --max-time 15 "http://www.google.cn/generate_204" 2>/dev/null | awk -F \' '{print $2}')
+    _login_page_url="$(get_login_page_url)"
 
     if [ -z "$_login_page_url" ]; then
         log_error "无法获取登录页面URL"

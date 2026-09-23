@@ -85,6 +85,22 @@ echo "========== check_network 测试（mock）=========="
 
 _orig_curl_with_proxy="$(declare -f curl_with_proxy)"
 
+# 门户跳转可能来自 HTTP Location 头，不能只从响应正文找。
+curl_with_proxy() {
+    printf 'HTTP/1.1 302 Found\r\nLocation: http://portal.example/eportal/index.jsp?x=1\r\nContent-Length: 0\r\n\r\n'
+}
+result="$(get_login_page_url)"
+assert_equals "$result" "http://portal.example/eportal/index.jsp?x=1"
+
+# 保留旧网关用页面脚本输出门户地址的兼容方式。
+curl_with_proxy() {
+    printf 'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nlocation=\047http://portal.example/eportal/index.jsp?x=1\047;'
+}
+result="$(get_login_page_url)"
+assert_equals "$result" "http://portal.example/eportal/index.jsp?x=1"
+
+eval "$_orig_curl_with_proxy"
+
 # mock: 返回 204（已在线）
 curl_with_proxy() { echo "204"; }
 assert_success check_network
