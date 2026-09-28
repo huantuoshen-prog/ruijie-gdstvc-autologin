@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/banner.svg" alt="RUIJIE 锐捷校园网自动认证：路由器 → 锐捷认证 → 互联网" width="100%">
+  <img src="https://cdn.jsdelivr.net/gh/huantuoshen-prog/ruijie-gdstvc-autologin@main/docs/assets/banner.svg" alt="RUIJIE 锐捷校园网自动认证：路由器 → 锐捷认证 → 互联网" width="100%">
 </p>
 
 <p align="center">
