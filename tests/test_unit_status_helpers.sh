@@ -30,15 +30,40 @@ EOF
 
 . "${PROJECT_DIR}/lib/common.sh"
 . "${PROJECT_DIR}/lib/daemon.sh"
+CONFIG_DIR="${TMPDIR}/config"
 
 echo "========== 状态展示辅助函数测试 =========="
 
 last_auth="$(get_last_auth_time 2>/dev/null || true)"
-if [ "$last_auth" = "2026-04-24 17:30:12" ]; then
-    pass "get_last_auth_time 保留日期与时间之间的空格"
+if [ -z "$last_auth" ]; then
+    pass "在线检测和刷新不能冒充认证成功"
 else
-    fail "get_last_auth_time 返回异常: ${last_auth:-<empty>}"
+    fail "在线检测被错误记录为认证: $last_auth"
 fi
+
+cat >> "$LOGFILE" <<'EOF'
+[2026-04-24 17:31:00] 认证成功! 服务器消息: ok
+[2026-04-24 17:31:02] 认证可能未成功，网络连接失败
+[2026-04-24 17:32:00] [CHECKING→ONLINE] 网络已恢复（未发起认证）
+EOF
+[ -z "$(get_last_auth_time || true)" ] && pass "服务器接受但验网失败、外部恢复均不算成功" || fail "失败或外部恢复被误报"
+printf '%s\n' '[2026-04-24 17:33:12] [RETRYING→ONLINE] 认证成功，网络已恢复' >> "$LOGFILE"
+[ "$(get_last_auth_time)" = '2026-04-24 17:33:12' ] && pass "识别通过验网的认证时间" || fail "未识别真正认证时间"
+mv "$LOGFILE" "${LOGFILE}.1"
+printf '%s\n' '[2026-04-24 17:40:12] [ONLINE] 在线检测正常 (1/10)' > "$LOGFILE"
+[ "$(get_last_auth_time)" = '2026-04-24 17:33:12' ] && pass "日志轮转后保留最后认证时间" || fail "轮转后丢失认证时间"
+
+LOGIN_RESULT_KIND=authenticated
+_record_auth_outcome
+saved_auth="$(get_last_auth_time)"
+rm -f "$LOGFILE" "${LOGFILE}.1"
+LOGIN_RESULT_KIND=already_online
+_record_auth_outcome
+[ -n "$saved_auth" ] && [ "$(get_last_auth_time)" = "$saved_auth" ] && pass "重启丢失内存日志后仍保留真正认证时间" || fail "持久认证时间丢失"
+grep -q 'already_online$' "${CONFIG_DIR}/auth-outcomes.log" && pass "外部恢复单独保存且不改写认证时间" || fail "未保存外部恢复"
+for ((i=0; i<70; i++)); do _record_auth_outcome; done
+[ "$(wc -l < "${CONFIG_DIR}/auth-outcomes.log")" -eq 64 ] && pass "持久记录最多64条" || fail "持久记录未限制长度"
+[ "$(get_last_auth_time)" = "$saved_auth" ] && pass "归属记录轮转不丢失最后认证时间" || fail "归属记录轮转丢失认证时间"
 
 mkdir -p "${TMPDIR}/proc/123"
 cat > "${TMPDIR}/proc/uptime" <<'EOF'

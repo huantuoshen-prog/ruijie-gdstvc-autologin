@@ -111,6 +111,56 @@ else
     fail "mock 登录流程应成功"
 fi
 
+# Exercise real do_login control flow with synthetic responses and credentials.
+# No network call or installed router configuration is used.
+curl_with_proxy() {
+    case "$*" in
+        *" -I "*)
+            _count="$(cat "$CHECK_COUNT_FILE")"
+            printf '%s' "$((_count + 1))" > "$CHECK_COUNT_FILE"
+            if [ "$_count" -eq 0 ]; then printf '%s' "$INITIAL_CODE"; else printf '%s' "$POST_CODE"; fi
+            ;;
+        *generate_204*)
+            printf '%s\r\n\r\n' 'HTTP/1.1 302 Found
+Location: http://172.16.16.16/eportal/index.jsp?wlanuserip=ip&wlanacname=ac&nasip=nas&mac=mac&nasid=nasid&vid=vid'
+            ;;
+        *InterFace.do*)
+            printf 'posted\n' >> "$AUTH_ARGS_FILE"
+            printf '%s' "$MOCK_RESPONSE"
+            return "$TRANSPORT_RC"
+            ;;
+        *) return 99 ;;
+    esac
+}
+login_case() {
+    local label="$1" expected_rc="$2" expected_kind="$3" actual_rc=0
+    printf '0' > "$CHECK_COUNT_FILE"
+    : > "$AUTH_ARGS_FILE"
+    if do_login user pass student DianXin > "${TMPDIR}/case.out" 2>&1; then actual_rc=0; else actual_rc=$?; fi
+    if [ "$actual_rc" -eq "$expected_rc" ] && [ "$LOGIN_RESULT_KIND" = "$expected_kind" ]; then
+        pass "$label"
+    else
+        fail "$label: rc=$actual_rc kind=$LOGIN_RESULT_KIND"
+    fi
+}
+INITIAL_CODE=302 POST_CODE=204 TRANSPORT_RC=0
+MOCK_RESPONSE=$'{\n  "result": "success",\n  "message": "ok"\n}'
+login_case "格式化JSON成功响应可正常认证" 0 authenticated
+POST_CODE=302
+login_case "服务器成功但验网失败不能算认证成功" 1 failed
+! grep -q '认证成功' "${TMPDIR}/case.out" && pass "验网失败前不输出成功日志" || fail "过早输出成功日志"
+POST_CODE=204
+MOCK_RESPONSE='{"result": "fail", "message": "denied"}'
+login_case "明确拒绝不能被外部网络恢复掩盖" 1 failed
+for MOCK_RESPONSE in '<html>error</html>' '{}' '{invalid' '{"result":"success"}{"result":"fail"}'; do
+    login_case "无效响应不得归因为自动认证" 1 failed
+done
+MOCK_RESPONSE='{"result":"success"}' TRANSPORT_RC=28
+login_case "传输超时即使携带成功片段也不能算成功" 1 failed
+TRANSPORT_RC=0 INITIAL_CODE=204
+login_case "原已在线明确归为非本次认证" 0 already_online
+[ ! -s "$AUTH_ARGS_FILE" ] && pass "已在线时没有提交认证请求" || fail "已在线仍提交了认证"
+
 echo ""
 echo "=========================================="
 echo "  结果: ${GREEN}${PASS} passed${NC}, ${RED}${FAIL} failed${NC}"

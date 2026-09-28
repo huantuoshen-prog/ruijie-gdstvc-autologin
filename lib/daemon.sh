@@ -12,13 +12,43 @@
 
 # 获取上次认证成功的时间（格式: YYYY-MM-DD HH:MM:SS）
 get_last_auth_time() {
-    if [ -f "$LOGFILE" ]; then
-        _last=$(grep -E "认证成功|login success|ONLINE" "$LOGFILE" 2>/dev/null \
+    local _auth_log _last
+    if [ -f "${CONFIG_DIR}/last-auth-success" ]; then
+        _last=$(grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$' "${CONFIG_DIR}/last-auth-success" | tail -1)
+        [ -n "$_last" ] && printf '%s\n' "$_last" && return 0
+    fi
+    for _auth_log in "$LOGFILE" "${LOGFILE}.1" "${LOGFILE}.2"; do
+        [ -f "$_auth_log" ] || continue
+        # Only the daemon transition after a successful connectivity post-check
+        # proves authentication; ONLINE probes and server replies do not.
+        _last=$(grep -E '^\[[0-9 :\-]+\] \[(CHECKING|RETRYING|WAIT_LONG)→ONLINE\] 认证成功' "$_auth_log" 2>/dev/null \
             | grep -oE '^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' \
             | tail -1 | sed 's/^\[//; s/\]$//')
         [ -n "$_last" ] && echo "$_last" && return 0
-    fi
+    done
     return 1
+}
+
+# Keep a bounded, credential-free audit of recovery outcomes across reboots.
+# Called only after a successful recovery, never on periodic ONLINE probes.
+_record_auth_outcome() {
+    local _audit="${CONFIG_DIR}/auth-outcomes.log" _audit_tmp _auth_timestamp
+    case "${LOGIN_RESULT_KIND:-}" in
+        authenticated|already_online) ;;
+        *) return 0 ;;
+    esac
+    _audit_tmp="${_audit}.tmp.$$"
+    _auth_timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    (
+        umask 077
+        mkdir -p "$CONFIG_DIR" || exit 1
+        if [ "$LOGIN_RESULT_KIND" = authenticated ]; then
+            printf '%s\n' "$_auth_timestamp" > "${CONFIG_DIR}/last-auth-success.tmp.$$" &&
+                mv -f "${CONFIG_DIR}/last-auth-success.tmp.$$" "${CONFIG_DIR}/last-auth-success" || exit 1
+        fi
+        { tail -n 63 "$_audit" 2>/dev/null || true; printf '[%s] %s\n' "$_auth_timestamp" "$LOGIN_RESULT_KIND"; } > "$_audit_tmp" &&
+            mv -f "$_audit_tmp" "$_audit"
+    ) || { rm -f "$_audit_tmp"; _log_daemon "无法保存认证归属记录"; }
 }
 
 daemon_format_duration() {
@@ -362,7 +392,9 @@ daemon_loop() {
                     if [ "$_online_check_count" -ge "$_ONLINE_REFRESH_CYCLE" ]; then
                         _online_check_count=0
                         _log_daemon "[ONLINE] 定期刷新 session..."
-                        _daemon_login || true
+                        if _daemon_login && [ "${LOGIN_RESULT_KIND:-}" = authenticated ]; then
+                            _record_auth_outcome
+                        fi
                     else
                         _log_daemon "[ONLINE] 在线检测正常 (${_online_check_count}/${_ONLINE_REFRESH_CYCLE})"
                     fi
@@ -386,6 +418,7 @@ daemon_loop() {
             CHECKING)
                 # 首次重试：立即尝试认证
                 if _daemon_login; then
+                    _record_auth_outcome
                     _reset_backoff
                     _state="ONLINE"
                     if [ "${LOGIN_RESULT_KIND:-}" = "already_online" ]; then
@@ -407,6 +440,7 @@ daemon_loop() {
             RETRYING)
                 # 指数退避重试
                 if _daemon_login; then
+                    _record_auth_outcome
                     _reset_backoff
                     _state="ONLINE"
                     if [ "${LOGIN_RESULT_KIND:-}" = "already_online" ]; then
@@ -433,6 +467,7 @@ daemon_loop() {
             WAIT_LONG)
                 # 长时间等待状态（每5分钟尝试一次）
                 if _daemon_login; then
+                    _record_auth_outcome
                     _reset_backoff
                     _state="ONLINE"
                     if [ "${LOGIN_RESULT_KIND:-}" = "already_online" ]; then

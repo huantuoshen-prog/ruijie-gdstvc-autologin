@@ -207,7 +207,7 @@ do_login() {
 
     # queryString 已按锐捷协议完成两层编码；必须用 --data 原样发送。
     # 再用 --data-urlencode 会多编码一层，服务端无法识别 NAS 设备参数。
-    authResult=$(curl_with_proxy -sS --connect-timeout 10 --max-time 30 -A "$USER_AGENT" \
+    if ! authResult=$(curl_with_proxy -sS --connect-timeout 10 --max-time 30 -A "$USER_AGENT" \
         -e "${_login_page_url}" \
         -b "EPORTAL_COOKIE_USERNAME=; EPORTAL_COOKIE_PASSWORD=; EPORTAL_COOKIE_SERVER=; EPORTAL_COOKIE_SERVER_NAME=; EPORTAL_AUTO_LAND=; EPORTAL_USER_GROUP=; EPORTAL_COOKIE_OPERATORPWD=;" \
         --data-urlencode "userId=${_username}" \
@@ -218,30 +218,28 @@ do_login() {
         --data-urlencode "validcode=" --data-urlencode "passwordEncrypt=false" \
         -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" \
         -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
-        "${_login_url}" 2>&1)
+        "${_login_url}" 2>/dev/null); then
+        log_error "认证请求传输失败或超时，稍后重试"
+        return 1
+    fi
 
     # 解析认证结果 (对齐工作脚本: 检查 JSON result 字段)
     echo ""
     log_step "解析认证服务器响应..."
 
-    if echo "$authResult" | grep -q '"result"'; then
-        _result=$(echo "$authResult" | grep -o '"result":"[^"]*"' | cut -d'"' -f4)
-        _message=$(echo "$authResult" | grep -o '"message":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "无详细信息")
-
-        if [ "$_result" = "success" ]; then
-            log_success "认证成功! 服务器消息: $_message"
-        else
-            log_error "认证失败! 错误信息: $_message"
-            echo ""
-            return 1
-        fi
-    else
-        # 非JSON响应
-        log_info "服务器响应: $authResult"
-        if [ "$VERBOSE" = "true" ]; then
-            echo "[VERBOSE] 原始响应: $authResult"
-        fi
+    # jq is an installation dependency. Parse JSON instead of depending on
+    # spacing, and never turn HTML/invalid responses into authentication success.
+    if ! _result=$(printf '%s' "$authResult" | jq -ser \
+        'if length == 1 and (.[0] | type) == "object" then .[0].result | select(type == "string" and length > 0) else empty end' 2>/dev/null); then
+        log_error "认证服务器返回无效响应，无法确认认证结果"
+        return 1
     fi
+    _message=$(printf '%s' "$authResult" | jq -r '.message // "无详细信息"' 2>/dev/null)
+    if [ "$_result" != "success" ]; then
+        log_error "认证失败! 错误信息: $_message"
+        return 1
+    fi
+    log_info "服务器接受认证请求，正在验证网络连接"
 
     echo ""
 
